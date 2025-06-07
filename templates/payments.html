@@ -1,0 +1,732 @@
+{% extends "base.html" %}
+
+{% block title %}إدارة المالية - نظام إدارة الطلاب{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>
+                <i class="fas fa-chart-line me-2"></i>
+                إدارة المالية
+            </h2>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="btn-group" role="group">
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addPaymentModal">
+                    <i class="fas fa-plus me-2"></i>
+                    دفعة جديدة
+                </button>
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
+                    <i class="fas fa-minus me-2"></i>
+                    مصروف جديد
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Overview Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="financial-card income-card">
+                <div class="card-icon">
+                    <i class="fas fa-arrow-down"></i>
+                </div>
+                <div class="card-content">
+                    <h3>{{ "%.2f"|format(total_income) }} ج.م</h3>
+                    <p>إجمالي الإيرادات</p>
+                    <small class="trend">
+                        <i class="fas fa-calendar me-1"></i>
+                        {{ recent_payments }} دفعة خلال 30 يوم
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="financial-card expense-card">
+                <div class="card-icon">
+                    <i class="fas fa-arrow-up"></i>
+                </div>
+                <div class="card-content">
+                    <h3>{{ "%.2f"|format(total_expenses) }} ج.م</h3>
+                    <p>إجمالي المصروفات</p>
+                    <small class="trend">
+                        <i class="fas fa-calendar me-1"></i>
+                        {{ recent_expenses }} مصروف خلال 30 يوم
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="financial-card balance-card {% if net_balance >= 0 %}positive{% else %}negative{% endif %}">
+                <div class="card-icon">
+                    <i class="fas fa-balance-scale"></i>
+                </div>
+                <div class="card-content">
+                    <h3>{{ "%.2f"|format(net_balance) }} ج.م</h3>
+                    <p>الرصيد الصافي</p>
+                    <small class="trend">
+                        {% if net_balance >= 0 %}
+                        <i class="fas fa-arrow-up text-success me-1"></i>
+                        ربح صافي
+                        {% else %}
+                        <i class="fas fa-arrow-down text-danger me-1"></i>
+                        خسارة صافية
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="financial-card dues-card">
+                <div class="card-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="card-content">
+                    <h3>{{ students_with_dues }}</h3>
+                    <p>طلاب لديهم مستحقات</p>
+                    <small class="trend">
+                        <i class="fas fa-users me-1"></i>
+                        من إجمالي {{ students|length }} طالب
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs for Income and Expenses -->
+    <div class="card">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="financialTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="income-tab" data-bs-toggle="tab" data-bs-target="#income"
+                        type="button" role="tab">
+                        <i class="fas fa-arrow-down text-success me-2"></i>
+                        الإيرادات ({{ payments|length }})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="expenses-tab" data-bs-toggle="tab" data-bs-target="#expenses"
+                        type="button" role="tab">
+                        <i class="fas fa-arrow-up text-danger me-2"></i>
+                        المصروفات ({{ expenses|length }})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="students-tab" data-bs-toggle="tab" data-bs-target="#students"
+                        type="button" role="tab">
+                        <i class="fas fa-users text-info me-2"></i>
+                        حالة الطلاب
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content" id="financialTabsContent">
+                <!-- Income Tab -->
+                <div class="tab-pane fade show active" id="income" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>الطالب</th>
+                                    <th>المبلغ</th>
+                                    <th>الشهر</th>
+                                    <th>التاريخ</th>
+                                    <th>ملاحظات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for payment in payments %}
+                                {% set student = students|selectattr('id', 'equalto', payment.student_id)|first %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="student-avatar me-2">{{ student.name[0] if student else '؟' }}
+                                            </div>
+                                            {{ student.name if student else 'غير محدد' }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">+{{ payment.amount }} ج.م</span>
+                                    </td>
+                                    <td>{{ payment.month or '-' }}</td>
+                                    <td>{{ payment.date.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ payment.notes or '-' }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-money-bill fa-3x mb-3"></i>
+                                        <p>لا توجد مدفوعات مسجلة بعد</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Expenses Tab -->
+                <div class="tab-pane fade" id="expenses" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>الوصف</th>
+                                    <th>الفئة</th>
+                                    <th>المبلغ</th>
+                                    <th>التاريخ</th>
+                                    <th>ملاحظات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for expense in expenses %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ expense.description }}</td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ expense.category or 'أخرى' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-danger">-{{ expense.amount }} ج.م</span>
+                                    </td>
+                                    <td>{{ expense.date.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ expense.notes or '-' }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-receipt fa-3x mb-3"></i>
+                                        <p>لا توجد مصروفات مسجلة بعد</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Students Payment Status Tab -->
+                <div class="tab-pane fade" id="students" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>الطالب</th>
+                                    <th>سعر الكورس</th>
+                                    <th>المدفوع</th>
+                                    <th>المتبقي</th>
+                                    <th>الحالة</th>
+                                    <th>إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in students %}
+                                {% set remaining = student.remaining_balance %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="student-avatar me-2">{{ student.name[0] }}</div>
+                                            {{ student.name }}
+                                        </div>
+                                    </td>
+                                    <td>{{ student.total_course_price }} ج.م</td>
+                                    <td>{{ student.total_paid }} ج.م</td>
+                                    <td>{{ remaining }} ج.م</td>
+                                    <td>
+                                        {% if remaining <= 0 %} <span class="badge bg-success">مكتمل</span>
+                                            {% elif remaining < student.total_course_price * 0.5 %} <span
+                                                class="badge bg-warning">نصف المبلغ</span>
+                                                {% else %}
+                                                <span class="badge bg-danger">غير مدفوع</span>
+                                                {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if remaining > 0 %}
+                                        <button class="btn btn-sm btn-outline-success"
+                                            onclick="quickPayment({{ student.id }}, '{{ student.name }}', {{ remaining }})">
+                                            <i class="fas fa-plus me-1"></i>
+                                            دفعة سريعة
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Payment Modal -->
+<div class="modal fade" id="addPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus me-2"></i>
+                    إضافة دفعة جديدة
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_payment') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="student_search" class="form-label">الطالب *</label>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="student_search"
+                                placeholder="ابحث عن الطالب بالاسم..." autocomplete="off">
+                            <input type="hidden" id="student_id" name="student_id" required>
+                            <div class="invalid-feedback">
+                                يرجى اختيار طالب
+                            </div>
+
+                            <!-- Student dropdown list -->
+                            <div class="student-dropdown" id="student_dropdown" style="display: none;">
+                                <div class="student-list" id="student_list">
+                                    {% for student in students %}
+                                    <div class="student-option" data-id="{{ student.id }}"
+                                        data-name="{{ student.name }}" data-remaining="{{ student.remaining_balance }}">
+                                        <div class="d-flex align-items-center">
+                                            <div class="student-avatar-sm me-2">{{ student.name[0] }}</div>
+                                            <div class="flex-grow-1">
+                                                <div class="student-name">{{ student.name }}</div>
+                                                <small class="text-muted">متبقي: {{ student.remaining_balance }}
+                                                    ج.م</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="amount" class="form-label">المبلغ (ج.م) *</label>
+                        <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0"
+                            required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="month" class="form-label">الشهر</label>
+                        <select class="form-select" id="month" name="month">
+                            <option value="">اختر الشهر</option>
+                            <option value="يناير">يناير</option>
+                            <option value="فبراير">فبراير</option>
+                            <option value="مارس">مارس</option>
+                            <option value="أبريل">أبريل</option>
+                            <option value="مايو">مايو</option>
+                            <option value="يونيو">يونيو</option>
+                            <option value="يوليو">يوليو</option>
+                            <option value="أغسطس">أغسطس</option>
+                            <option value="سبتمبر">سبتمبر</option>
+                            <option value="أكتوبر">أكتوبر</option>
+                            <option value="نوفمبر">نوفمبر</option>
+                            <option value="ديسمبر">ديسمبر</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">ملاحظات</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>
+                        حفظ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Expense Modal -->
+<div class="modal fade" id="addExpenseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-minus me-2"></i>
+                    إضافة مصروف جديد
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_expense') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="description" class="form-label">وصف المصروف *</label>
+                        <input type="text" class="form-control" id="description" name="description" required
+                            placeholder="مثال: راتب المدرس، إيجار المكان">
+                    </div>
+                    <div class="mb-3">
+                        <label for="category" class="form-label">الفئة *</label>
+                        <select class="form-select" id="category" name="category" required>
+                            <option value="">اختر الفئة</option>
+                            <option value="رواتب">رواتب</option>
+                            <option value="إيجار">إيجار</option>
+                            <option value="مرافق">مرافق (كهرباء، ماء، إنترنت)</option>
+                            <option value="مستلزمات">مستلزمات تعليمية</option>
+                            <option value="صيانة">صيانة</option>
+                            <option value="تسويق">تسويق وإعلان</option>
+                            <option value="أخرى">أخرى</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="expense_amount" class="form-label">المبلغ (ج.م) *</label>
+                        <input type="number" class="form-control" id="expense_amount" name="amount" step="0.01" min="0"
+                            required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="expense_notes" class="form-label">ملاحظات</label>
+                        <textarea class="form-control" id="expense_notes" name="notes" rows="3"
+                            placeholder="تفاصيل إضافية عن المصروف"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-save me-2"></i>
+                        حفظ المصروف
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .financial-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        border: none;
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        transition: transform 0.3s ease;
+    }
+
+    .financial-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .income-card {
+        border-left: 5px solid #28a745;
+    }
+
+    .expense-card {
+        border-left: 5px solid #dc3545;
+    }
+
+    .balance-card.positive {
+        border-left: 5px solid #17a2b8;
+    }
+
+    .balance-card.negative {
+        border-left: 5px solid #ffc107;
+    }
+
+    .dues-card {
+        border-left: 5px solid #fd7e14;
+    }
+
+    .card-icon {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 15px;
+        font-size: 1.5rem;
+    }
+
+    .income-card .card-icon {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    }
+
+    .expense-card .card-icon {
+        background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+    }
+
+    .balance-card.positive .card-icon {
+        background: linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%);
+    }
+
+    .balance-card.negative .card-icon {
+        background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    }
+
+    .dues-card .card-icon {
+        background: linear-gradient(135deg, #fd7e14 0%, #ffc107 100%);
+    }
+
+    .card-content h3 {
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #333;
+    }
+
+    .card-content p {
+        margin: 5px 0;
+        color: #666;
+        font-weight: 500;
+    }
+
+    .trend {
+        color: #999;
+        font-size: 0.85rem;
+    }
+
+    .student-avatar {
+        width: 35px;
+        height: 35px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 0.9rem;
+    }
+
+    .nav-tabs .nav-link {
+        border: none;
+        border-bottom: 3px solid transparent;
+        color: #666;
+        font-weight: 500;
+    }
+
+    .nav-tabs .nav-link.active {
+        background: none;
+        border-bottom: 3px solid #007bff;
+        color: #007bff;
+    }
+
+    .table th {
+        border-top: none;
+        font-weight: 600;
+        color: #333;
+        background: #f8f9fa;
+    }
+
+    .badge {
+        font-size: 0.8rem;
+        padding: 0.5em 0.8em;
+    }
+
+    /* Student Search Dropdown Styles */
+    .student-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .student-option {
+        padding: 12px 15px;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+        transition: background-color 0.2s ease;
+    }
+
+    .student-option:hover {
+        background-color: #f8f9fa;
+    }
+
+    .student-option:last-child {
+        border-bottom: none;
+    }
+
+    .student-option.selected {
+        background-color: #e3f2fd;
+        border-left: 3px solid #2196f3;
+    }
+
+    .student-avatar-sm {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 0.8rem;
+    }
+
+    .student-name {
+        font-weight: 500;
+        color: #333;
+    }
+
+    .student-search-selected {
+        background-color: #e8f5e8;
+        border-color: #28a745;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const studentSearch = document.getElementById('student_search');
+    const studentDropdown = document.getElementById('student_dropdown');
+    const studentIdInput = document.getElementById('student_id');
+    const amountInput = document.getElementById('amount');
+    let selectedStudentId = null;
+
+    // Show dropdown when search input is focused
+    studentSearch.addEventListener('focus', function () {
+        studentDropdown.style.display = 'block';
+        filterStudents();
+    });
+
+    // Filter students based on search input
+    studentSearch.addEventListener('input', function () {
+        filterStudents();
+        // Clear selection if user types after selecting
+        if (selectedStudentId) {
+            selectedStudentId = null;
+            studentIdInput.value = '';
+            studentSearch.classList.remove('student-search-selected');
+            amountInput.value = '';
+        }
+    });
+
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.position-relative')) {
+            studentDropdown.style.display = 'none';
+        }
+    });
+
+    // Handle student selection
+    document.getElementById('student_list').addEventListener('click', function (e) {
+        const studentOption = e.target.closest('.student-option');
+        if (studentOption) {
+            const studentId = studentOption.getAttribute('data-id');
+            const studentName = studentOption.getAttribute('data-name');
+            const remaining = studentOption.getAttribute('data-remaining');
+
+            // Set values
+            selectedStudentId = studentId;
+            studentIdInput.value = studentId;
+            studentSearch.value = studentName;
+            studentSearch.classList.add('student-search-selected');
+
+            // Auto-fill amount with remaining balance
+            if (remaining && remaining > 0) {
+                amountInput.value = remaining;
+                amountInput.max = remaining;
+            }
+
+            // Hide dropdown
+            studentDropdown.style.display = 'none';
+
+            // Remove previous selections
+            document.querySelectorAll('.student-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+
+            // Mark as selected
+            studentOption.classList.add('selected');
+        }
+    });
+
+    // Filter function
+    function filterStudents() {
+        const searchValue = studentSearch.value.toLowerCase();
+        const students = document.querySelectorAll('.student-option');
+        let hasVisibleStudents = false;
+
+        students.forEach(student => {
+            const name = student.getAttribute('data-name').toLowerCase();
+            if (name.includes(searchValue)) {
+                student.style.display = 'block';
+                hasVisibleStudents = true;
+            } else {
+                student.style.display = 'none';
+            }
+        });
+
+        // Show/hide dropdown based on whether there are visible students
+        if (hasVisibleStudents && studentSearch.value.length > 0) {
+            studentDropdown.style.display = 'block';
+        } else if (studentSearch.value.length === 0) {
+            studentDropdown.style.display = 'block';
+        } else {
+            studentDropdown.style.display = 'none';
+        }
+    }
+
+    // Reset form when modal is hidden
+    document.getElementById('addPaymentModal').addEventListener('hidden.bs.modal', function () {
+        studentSearch.value = '';
+        studentIdInput.value = '';
+        selectedStudentId = null;
+        studentSearch.classList.remove('student-search-selected');
+        amountInput.value = '';
+        amountInput.removeAttribute('max');
+        document.querySelectorAll('.student-option').forEach(opt => {
+            opt.classList.remove('selected');
+            opt.style.display = 'block';
+        });
+    });
+
+    // Quick payment function (updated)
+    function quickPayment(studentId, studentName, amount) {
+        // Set values
+        selectedStudentId = studentId;
+        studentIdInput.value = studentId;
+        studentSearch.value = studentName;
+        studentSearch.classList.add('student-search-selected');
+        amountInput.value = amount;
+
+        // Mark student as selected in dropdown
+        document.querySelectorAll('.student-option').forEach(opt => {
+            opt.classList.remove('selected');
+            if (opt.getAttribute('data-id') === studentId.toString()) {
+                opt.classList.add('selected');
+            }
+        });
+
+        // Show payment modal
+        new bootstrap.Modal(document.getElementById('addPaymentModal')).show();
+    }
+
+    // Form validation
+    document.querySelector('#addPaymentModal form').addEventListener('submit', function (e) {
+        if (!studentIdInput.value) {
+            e.preventDefault();
+            studentSearch.classList.add('is-invalid');
+            studentSearch.focus();
+        } else {
+            studentSearch.classList.remove('is-invalid');
+        }
+    });
+</script>
+{% endblock %}

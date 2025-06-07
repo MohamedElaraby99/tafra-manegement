@@ -1,0 +1,873 @@
+{% extends "base.html" %}
+
+{% block title %}إدارة المجموعات - نظام إدارة الطلاب{% endblock %}
+
+{% block content %}
+<style>
+    .group-card {
+        transition: all 0.3s ease;
+        border: none;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .group-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .day-schedule {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border: 2px solid transparent;
+        transition: all 0.3s ease;
+    }
+
+    .day-schedule:hover {
+        border-color: #667eea;
+        transform: scale(1.02);
+    }
+
+    .day-checkbox {
+        transform: scale(1.3);
+        margin-right: 10px;
+    }
+
+    .day-label {
+        color: white;
+        font-weight: bold;
+        font-size: 1.1em;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    }
+
+    .time-selects {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 10px;
+        padding: 15px;
+        margin-top: 10px;
+    }
+
+    .modern-select {
+        border: 2px solid #e3f2fd;
+        border-radius: 8px;
+        padding: 8px 12px;
+        transition: all 0.3s ease;
+    }
+
+    .modern-select:focus {
+        border-color: #2196f3;
+        box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        transform: scale(1.02);
+    }
+
+    .btn-gradient {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        border: none;
+        color: white;
+        transition: all 0.3s ease;
+    }
+
+    .btn-gradient:hover {
+        background: linear-gradient(45deg, #764ba2, #667eea);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    .stats-card {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 15px;
+    }
+
+    .schedule-badge {
+        background: linear-gradient(45deg, #11998e, #38ef7d);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.8em;
+        margin: 2px;
+        display: inline-block;
+    }
+
+    .action-btn {
+        margin: 2px;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+
+    .action-btn:hover {
+        transform: scale(1.1);
+    }
+
+    .header-gradient {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px 15px 0 0;
+        padding: 20px;
+    }
+
+    .modal-content {
+        border-radius: 20px;
+        border: none;
+        overflow: hidden;
+    }
+
+    .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+    }
+
+    .form-control,
+    .form-select {
+        border-radius: 10px;
+        border: 2px solid #e3f2fd;
+        transition: all 0.3s ease;
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+        border-color: #2196f3;
+        box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+    }
+</style>
+
+<div class="fade-in">
+    <!-- Enhanced Page Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center"
+                        style="width: 60px; height: 60px;">
+                        <i class="fas fa-users fa-2x text-white"></i>
+                    </div>
+                </div>
+                <div>
+                    <h2 class="mb-0">إدارة المجموعات</h2>
+                    <p class="text-muted mb-0">إدارة وتنظيم مجموعات الطلاب والجداول الدراسية</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-gradient btn-lg me-2" data-bs-toggle="modal" data-bs-target="#addGroupModal">
+                <i class="fas fa-plus me-2"></i>
+                إضافة مجموعة جديدة
+            </button>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stats-card text-center">
+                <i class="fas fa-users fa-2x mb-2"></i>
+                <h4>{{ groups|length }}</h4>
+                <p class="mb-0">إجمالي المجموعات</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card text-center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <i class="fas fa-user-graduate fa-2x mb-2"></i>
+                <h4>{{ total_students }}</h4>
+                <p class="mb-0">إجمالي الطلاب</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card text-center" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                <i class="fas fa-calendar-alt fa-2x mb-2"></i>
+                <h4>{{ groups|selectattr('schedules')|list|length }}</h4>
+                <p class="mb-0">مجموعات لها جدول</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card text-center" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+                <i class="fas fa-chalkboard-teacher fa-2x mb-2"></i>
+                <h4>{{ instructors|length }}</h4>
+                <p class="mb-0">عدد المدرسين</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced Groups Table -->
+    <div class="group-card card">
+        <div class="header-gradient">
+            <h5 class="mb-0">
+                <i class="fas fa-list me-2"></i>
+                قائمة المجموعات
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center">#</th>
+                            <th><i class="fas fa-tag me-2"></i>اسم المجموعة</th>
+                            <th><i class="fas fa-layer-group me-2"></i>المستوى</th>
+                            <th><i class="fas fa-chalkboard-teacher me-2"></i>المدرس</th>
+                            <th><i class="fas fa-money-bill me-2"></i>السعر</th>
+                            <th><i class="fas fa-users me-2"></i>عدد الطلاب</th>
+                            <th><i class="fas fa-user-plus me-2"></i>الحد الأقصى</th>
+                            <th><i class="fas fa-calendar me-2"></i>الجداول</th>
+                            <th class="text-center"><i class="fas fa-cogs me-2"></i>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for group in groups %}
+                        <tr>
+                            <td class="text-center">
+                                <span class="badge bg-primary rounded-pill">{{ loop.index }}</span>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-info rounded-circle d-flex align-items-center justify-content-center me-2"
+                                        style="width: 35px; height: 35px;">
+                                        <i class="fas fa-users text-white"></i>
+                                    </div>
+                                    <strong>{{ group.name }}</strong>
+                                </div>
+                            </td>
+                            <td>
+                                {% if group.level %}
+                                <span class="badge bg-info rounded-pill">{{ group.level }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-user text-primary me-2"></i>
+                                    {{ group.instructor_ref.name if group.instructor_ref else '-' }}
+                                </div>
+                            </td>
+                            <td>
+                                {{ group.price }} ج.م
+                            </td>
+                            <td>
+                                <span class="badge bg-success rounded-pill fs-6">{{ group.students.count() }}</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-warning text-dark rounded-pill">{{ group.max_students }}</span>
+                            </td>
+                            <td>
+                                {% if group.schedules %}
+                                <div>
+                                    {% for schedule in group.schedules %}
+                                    {% set start_12 = convert_24_to_12_hour(schedule.start_time) %}
+                                    {% set end_12 = convert_24_to_12_hour(schedule.end_time) %}
+                                    <div class="schedule-badge">
+                                        <i class="fas fa-calendar-day me-1"></i>
+                                        {{ schedule.day_of_week }}: {{ start_12.hour }}:{{ start_12.minute }} {{
+                                        start_12.period }} - {{ end_12.hour }}:{{ end_12.minute }} {{ end_12.period }}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">
+                                    <i class="fas fa-calendar-times me-1"></i>
+                                    لا يوجد جدول
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <button class="btn btn-warning btn-sm action-btn"
+                                    onclick="editGroup({{ group.id }}, '{{ group.name }}', '{{ group.level }}', {{ group.instructor_id }}, {{ group.max_students }})"
+                                    title="تعديل المجموعة">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-sm action-btn"
+                                    onclick="deleteGroup({{ group.id }}, '{{ group.name }}')" title="حذف المجموعة">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <a href="{{ url_for('group_details', group_id=group.id) }}"
+                                    class="btn btn-info btn-sm action-btn" title="تفاصيل المجموعة والحضور">
+                                    <i class="fas fa-chart-line"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-5">
+                                <div>
+                                    <i class="fas fa-users fa-5x mb-3 text-muted opacity-50"></i>
+                                    <h4>لا توجد مجموعات مسجلة بعد</h4>
+                                    <p>ابدأ بإضافة مجموعة جديدة لإدارة الطلاب</p>
+                                    <button class="btn btn-gradient" data-bs-toggle="modal"
+                                        data-bs-target="#addGroupModal">
+                                        <i class="fas fa-plus me-2"></i>
+                                        إضافة أول مجموعة
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Add Group Modal -->
+<div class="modal fade" id="addGroupModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-users me-2"></i>
+                    إضافة مجموعة جديدة
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_group') }}">
+                <div class="modal-body">
+                    <!-- Basic Information -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h6 class="text-primary mb-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                المعلومات الأساسية
+                            </h6>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">اسم المجموعة *</label>
+                                <input type="text" class="form-control" name="name" required
+                                    placeholder="أدخل اسم المجموعة">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">المستوى</label>
+                                <select class="form-select" name="level">
+                                    <option value="">اختر المستوى</option>
+                                    <option value="A1">A1</option>
+                                    <option value="A2">A2</option>
+                                    <option value="A3">A3</option>
+                                    <option value="UC Math">UC Math</option>
+                                    <option value="Communication">Communication</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">المدرس *</label>
+                                <select class="form-select" name="instructor_id" required>
+                                    <option value="">اختر المدرس</option>
+                                    {% for instructor in instructors %}
+                                    <option value="{{ instructor.id }}">{{ instructor.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">سعر المجموعة (ج.م) *</label>
+                                <input type="number" class="form-control" name="price" step="0.01" min="0" required
+                                    placeholder="أدخل سعر المجموعة">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">الحد الأقصى للطلاب</label>
+                                <input type="number" class="form-control" name="max_students" value="15" min="1"
+                                    max="50">
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <!-- Schedule Section -->
+                    <div class="row">
+                        <div class="col-12">
+                            <h6 class="text-primary mb-3">
+                                <i class="fas fa-calendar-alt me-2"></i>
+                                الجدول الأسبوعي
+                            </h6>
+                            <p class="text-muted small mb-4">اختر الأيام والأوقات التي تريد إضافة دروس فيها</p>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- السبت -->
+                        <div class="col-lg-6 mb-3">
+                            <div class="day-schedule">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" name="days[]"
+                                        value="السبت" id="sat">
+                                    <label class="form-check-label day-label" for="sat">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        السبت
+                                    </label>
+                                </div>
+                                <div class="time-selects">
+                                    <div class="row">
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الساعة</label>
+                                            <select class="form-select modern-select" name="sat_hour">
+                                                <option value="">ساعة</option>
+                                                {% for hour in range(1, 13) %}
+                                                <option value="{{ hour }}">{{ hour }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الدقيقة</label>
+                                            <select class="form-select modern-select" name="sat_minute">
+                                                <option value="00">00</option>
+                                                <option value="15">15</option>
+                                                <option value="30">30</option>
+                                                <option value="45">45</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">فترة</label>
+                                            <select class="form-select modern-select" name="sat_period">
+                                                <option value="AM">ص</option>
+                                                <option value="PM">م</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">المدة</label>
+                                            <select class="form-select modern-select" name="sat_duration">
+                                                <option value="60">60 دقيقة</option>
+                                                <option value="90">90 دقيقة</option>
+                                                <option value="120">120 دقيقة</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- الأحد -->
+                        <div class="col-lg-6 mb-3">
+                            <div class="day-schedule">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" name="days[]"
+                                        value="الأحد" id="sun">
+                                    <label class="form-check-label day-label" for="sun">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        الأحد
+                                    </label>
+                                </div>
+                                <div class="time-selects">
+                                    <div class="row">
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الساعة</label>
+                                            <select class="form-select modern-select" name="sun_hour">
+                                                <option value="">ساعة</option>
+                                                {% for hour in range(1, 13) %}
+                                                <option value="{{ hour }}">{{ hour }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الدقيقة</label>
+                                            <select class="form-select modern-select" name="sun_minute">
+                                                <option value="00">00</option>
+                                                <option value="15">15</option>
+                                                <option value="30">30</option>
+                                                <option value="45">45</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">فترة</label>
+                                            <select class="form-select modern-select" name="sun_period">
+                                                <option value="AM">ص</option>
+                                                <option value="PM">م</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">المدة</label>
+                                            <select class="form-select modern-select" name="sun_duration">
+                                                <option value="60">60 دقيقة</option>
+                                                <option value="90">90 دقيقة</option>
+                                                <option value="120">120 دقيقة</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- الاثنين -->
+                        <div class="col-lg-6 mb-3">
+                            <div class="day-schedule">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" name="days[]"
+                                        value="الاثنين" id="mon">
+                                    <label class="form-check-label day-label" for="mon">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        الاثنين
+                                    </label>
+                                </div>
+                                <div class="time-selects">
+                                    <div class="row">
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الساعة</label>
+                                            <select class="form-select modern-select" name="mon_hour">
+                                                <option value="">ساعة</option>
+                                                {% for hour in range(1, 13) %}
+                                                <option value="{{ hour }}">{{ hour }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الدقيقة</label>
+                                            <select class="form-select modern-select" name="mon_minute">
+                                                <option value="00">00</option>
+                                                <option value="15">15</option>
+                                                <option value="30">30</option>
+                                                <option value="45">45</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">فترة</label>
+                                            <select class="form-select modern-select" name="mon_period">
+                                                <option value="AM">ص</option>
+                                                <option value="PM">م</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">المدة</label>
+                                            <select class="form-select modern-select" name="mon_duration">
+                                                <option value="60">60 دقيقة</option>
+                                                <option value="90">90 دقيقة</option>
+                                                <option value="120">120 دقيقة</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- الثلاثاء -->
+                        <div class="col-lg-6 mb-3">
+                            <div class="day-schedule">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" name="days[]"
+                                        value="الثلاثاء" id="tue">
+                                    <label class="form-check-label day-label" for="tue">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        الثلاثاء
+                                    </label>
+                                </div>
+                                <div class="time-selects">
+                                    <div class="row">
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الساعة</label>
+                                            <select class="form-select modern-select" name="tue_hour">
+                                                <option value="">ساعة</option>
+                                                {% for hour in range(1, 13) %}
+                                                <option value="{{ hour }}">{{ hour }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الدقيقة</label>
+                                            <select class="form-select modern-select" name="tue_minute">
+                                                <option value="00">00</option>
+                                                <option value="15">15</option>
+                                                <option value="30">30</option>
+                                                <option value="45">45</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">فترة</label>
+                                            <select class="form-select modern-select" name="tue_period">
+                                                <option value="AM">ص</option>
+                                                <option value="PM">م</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">المدة</label>
+                                            <select class="form-select modern-select" name="tue_duration">
+                                                <option value="60">60 دقيقة</option>
+                                                <option value="90">90 دقيقة</option>
+                                                <option value="120">120 دقيقة</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- الأربعاء -->
+                        <div class="col-lg-6 mb-3">
+                            <div class="day-schedule">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" name="days[]"
+                                        value="الأربعاء" id="wed">
+                                    <label class="form-check-label day-label" for="wed">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        الأربعاء
+                                    </label>
+                                </div>
+                                <div class="time-selects">
+                                    <div class="row">
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الساعة</label>
+                                            <select class="form-select modern-select" name="wed_hour">
+                                                <option value="">ساعة</option>
+                                                {% for hour in range(1, 13) %}
+                                                <option value="{{ hour }}">{{ hour }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الدقيقة</label>
+                                            <select class="form-select modern-select" name="wed_minute">
+                                                <option value="00">00</option>
+                                                <option value="15">15</option>
+                                                <option value="30">30</option>
+                                                <option value="45">45</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">فترة</label>
+                                            <select class="form-select modern-select" name="wed_period">
+                                                <option value="AM">ص</option>
+                                                <option value="PM">م</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">المدة</label>
+                                            <select class="form-select modern-select" name="wed_duration">
+                                                <option value="60">60 دقيقة</option>
+                                                <option value="90">90 دقيقة</option>
+                                                <option value="120">120 دقيقة</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- الخميس -->
+                        <div class="col-lg-6 mb-3">
+                            <div class="day-schedule">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" name="days[]"
+                                        value="الخميس" id="thu">
+                                    <label class="form-check-label day-label" for="thu">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        الخميس
+                                    </label>
+                                </div>
+                                <div class="time-selects">
+                                    <div class="row">
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الساعة</label>
+                                            <select class="form-select modern-select" name="thu_hour">
+                                                <option value="">ساعة</option>
+                                                {% for hour in range(1, 13) %}
+                                                <option value="{{ hour }}">{{ hour }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الدقيقة</label>
+                                            <select class="form-select modern-select" name="thu_minute">
+                                                <option value="00">00</option>
+                                                <option value="15">15</option>
+                                                <option value="30">30</option>
+                                                <option value="45">45</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">فترة</label>
+                                            <select class="form-select modern-select" name="thu_period">
+                                                <option value="AM">ص</option>
+                                                <option value="PM">م</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">المدة</label>
+                                            <select class="form-select modern-select" name="thu_duration">
+                                                <option value="60">60 دقيقة</option>
+                                                <option value="90">90 دقيقة</option>
+                                                <option value="120">120 دقيقة</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- الجمعة -->
+                        <div class="col-lg-6 mb-3">
+                            <div class="day-schedule">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" name="days[]"
+                                        value="الجمعة" id="fri">
+                                    <label class="form-check-label day-label" for="fri">
+                                        <i class="fas fa-calendar-day me-2"></i>
+                                        الجمعة
+                                    </label>
+                                </div>
+                                <div class="time-selects">
+                                    <div class="row">
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الساعة</label>
+                                            <select class="form-select modern-select" name="fri_hour">
+                                                <option value="">ساعة</option>
+                                                {% for hour in range(1, 13) %}
+                                                <option value="{{ hour }}">{{ hour }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">الدقيقة</label>
+                                            <select class="form-select modern-select" name="fri_minute">
+                                                <option value="00">00</option>
+                                                <option value="15">15</option>
+                                                <option value="30">30</option>
+                                                <option value="45">45</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">فترة</label>
+                                            <select class="form-select modern-select" name="fri_period">
+                                                <option value="AM">ص</option>
+                                                <option value="PM">م</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3 mb-2">
+                                            <label class="form-label small">المدة</label>
+                                            <select class="form-select modern-select" name="fri_duration">
+                                                <option value="60">60 دقيقة</option>
+                                                <option value="90">90 دقيقة</option>
+                                                <option value="120">120 دقيقة</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>
+                        إلغاء
+                    </button>
+                    <button type="submit" class="btn btn-gradient">
+                        <i class="fas fa-save me-2"></i>
+                        حفظ المجموعة
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Edit Group Modal -->
+<div class="modal fade" id="editGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2"></i>
+                    تعديل المجموعة
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editGroupForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">اسم المجموعة *</label>
+                        <input type="text" class="form-control" name="name" id="editName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">المستوى</label>
+                        <select class="form-select" name="level" id="editLevel">
+                            <option value="">اختر المستوى</option>
+                            <option value="A1">A1</option>
+                            <option value="A2">A2</option>
+                            <option value="A3">A3</option>
+                            <option value="UC Math">UC Math</option>
+                            <option value="Communication">Communication</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">المدرس *</label>
+                        <select class="form-select" name="instructor_id" id="editInstructor" required>
+                            <option value="">اختر المدرس</option>
+                            {% for instructor in instructors %}
+                            <option value="{{ instructor.id }}">{{ instructor.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">الحد الأقصى للطلاب</label>
+                        <input type="number" class="form-control" name="max_students" id="editMaxStudents" min="1"
+                            max="50">
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>ملاحظة:</strong> لتعديل الجداول، يرجى حذف المجموعة وإعادة إنشائها مع الجداول الجديدة.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>
+                        إلغاء
+                    </button>
+                    <button type="submit" class="btn btn-gradient">
+                        <i class="fas fa-save me-2"></i>
+                        حفظ التغييرات
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function editGroup(id, name, level, instructorId, maxStudents) {
+        document.getElementById('editGroupForm').action = `/edit_group/${id}`;
+        document.getElementById('editName').value = name;
+        document.getElementById('editLevel').value = level;
+        document.getElementById('editInstructor').value = instructorId || '';
+        document.getElementById('editMaxStudents').value = maxStudents;
+
+        new bootstrap.Modal(document.getElementById('editGroupModal')).show();
+    }
+
+    function deleteGroup(id, name) {
+        Swal.fire({
+            title: 'هل أنت متأكد؟',
+            html: `سيتم حذف المجموعة "<strong>${name}</strong>" نهائياً<br>وجميع البيانات المرتبطة بها`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'نعم، احذف',
+            cancelButtonText: 'إلغاء'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = `/delete_group/${id}`;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+    }
+
+    // Add SweetAlert2 if not already included
+    if (typeof Swal === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11';
+        document.head.appendChild(script);
+    }
+</script>
+{% endblock %}

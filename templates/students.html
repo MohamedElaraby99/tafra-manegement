@@ -1,0 +1,850 @@
+{% extends "base.html" %}
+
+{% block title %}إدارة الطلاب - نظام إدارة الطلاب{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>
+                <i class="fas fa-user-graduate me-2"></i>
+                إدارة الطلاب
+            </h2>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                <i class="fas fa-plus me-2"></i>
+                إضافة طالب جديد
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0">
+                <i class="fas fa-filter me-2"></i>
+                فلاتر البحث
+                {% if selected_instructor or selected_group %}
+                <span class="badge bg-warning ms-2">فلاتر نشطة</span>
+                {% endif %}
+            </h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('students') }}" id="filterForm">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="search_text" class="form-label">
+                            <i class="fas fa-search me-1"></i>
+                            البحث في الأسماء
+                        </label>
+                        <input type="text" class="form-control" id="search_text" placeholder="اكتب اسم الطالب..."
+                            onkeyup="quickSearch()">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="group_filter" class="form-label">
+                            <i class="fas fa-users me-1"></i>
+                            فلترة حسب المجموعة
+                        </label>
+                        <select class="form-select {{ 'border-warning' if selected_group else '' }}" id="group_filter"
+                            name="group_id" onchange="submitFilter()">
+                            <option value="">جميع المجموعات</option>
+                            {% for group in groups %}
+                            <option value="{{ group.id }}" {{ 'selected' if selected_group==group.id|string else '' }}>
+                                {{ group.name }} {% if group.level %}({{ group.level }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3 d-flex align-items-end">
+                        <div class="d-flex flex-column w-100">
+                            <div class="d-flex mb-2">
+                                <button type="button" class="btn btn-outline-secondary me-2" onclick="clearFilters()">
+                                    <i class="fas fa-times me-1"></i>
+                                    مسح الفلاتر
+                                </button>
+                                <button type="button" class="btn btn-outline-primary" onclick="exportFiltered()">
+                                    <i class="fas fa-download me-1"></i>
+                                    تصدير
+                                </button>
+                            </div>
+                            <div class="text-center">
+                                <span class="badge bg-info fs-6">
+                                    <i class="fas fa-list-ol me-1"></i>
+                                    عدد النتائج: {{ students|length }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Active Filters Display -->
+            {% if selected_group %}
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="alert alert-info py-2 mb-0">
+                        <strong>الفلاتر النشطة:</strong>
+                        {% if selected_group %}
+                        {% for group in groups %}
+                        {% if group.id|string == selected_group %}
+                        <span class="badge bg-success me-1">المجموعة: {{ group.name }}</span>
+                        {% endif %}
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Students Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">قائمة الطلاب</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>الاسم</th>
+                            <th>الهاتف</th>
+                            <th>العمر</th>
+                            <th>المنطقة</th>
+                            <th>المجموعة</th>
+                            <th>سعر الكورس</th>
+                            <th>المبلغ المدفوع</th>
+                            <th>المتبقي</th>
+                            <th>تاريخ التسجيل</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ student.name }}</td>
+                            <td>
+                                {% if student.phone %}
+                                <div class="d-flex align-items-center">
+                                    <span class="me-2">{{ student.phone }}</span>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <a href="tel:{{ student.phone }}" class="btn btn-outline-success btn-sm"
+                                            title="اتصال">
+                                            <i class="fas fa-phone"></i>
+                                        </a>
+                                        <a href="#" onclick="openWhatsApp('{{ student.phone }}')"
+                                            class="btn btn-outline-success btn-sm" title="واتساب">
+                                            <i class="fab fa-whatsapp"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ student.age }} سنة</td>
+                            <td>{{ student.location or '-' }}</td>
+                            <td>
+                                {% if student.groups %}
+                                {% for group in student.groups %}
+                                <div class="mb-1">
+                                    <span class="badge bg-primary me-1">{{ group.name }}</span>
+                                    {% if group.instructor_ref %}
+                                    <small class="text-muted">({{ group.instructor_ref.name }})</small>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ student.total_course_price }} ج.م</td>
+                            <td>{{ student.total_paid }} ج.م</td>
+                            <td>
+                                {% set remaining = student.remaining_balance %}
+                                <span class="badge bg-{{ 'success' if remaining <= 0 else 'warning' }}">
+                                    {{ "%.2f"|format(remaining) }} ج.م
+                                </span>
+                            </td>
+                            <td>
+                                <div class="text-muted">
+                                    <i class="fas fa-calendar-plus me-1"></i>
+                                    {{ format_arabic_date(student.registration_date) }}
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-warning me-1"
+                                    onclick="editStudent({{ student.id }}, '{{ student.name }}', '{{ student.phone }}', {{ student.age }}, '{{ student.location }}', [{% for group in student.groups %}{{ group.id }}{% if not loop.last %},{% endif %}{% endfor %}], '{{ student.registration_date.strftime('%Y-%m-%d') }}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" data-student-id="{{ student.id }}"
+                                    data-student-name="{{ student.name }}" onclick="deleteStudent(this)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-4">
+                                <i class="fas fa-user-graduate fa-3x mb-3"></i>
+                                {% if selected_group %}
+                                <p>لا توجد طلاب مطابقون للفلاتر المحددة</p>
+                                <button class="btn btn-outline-primary btn-sm" onclick="clearFilters()">
+                                    <i class="fas fa-times me-1"></i>
+                                    مسح الفلاتر وعرض جميع الطلاب
+                                </button>
+                                {% else %}
+                                <p>لا توجد طلاب مسجلين بعد</p>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Student Modal -->
+<div class="modal fade" id="addStudentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-plus me-2"></i>
+                    إضافة طالب جديد
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_student') }}">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">اسم الطالب *</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="phone" class="form-label">رقم الهاتف</label>
+                            <input type="tel" class="form-control" id="phone" name="phone">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="age" class="form-label">العمر *</label>
+                            <input type="number" class="form-control" id="age" name="age" min="5" max="100" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="location" class="form-label">البلد/المنطقة</label>
+                            <input type="text" class="form-control" id="location" name="location"
+                                placeholder="أدخل المنطقة أو البلد">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="group_ids" class="form-label">المجموعات (اختياري)</label>
+                            <div class="border rounded p-3" style="max-height: 250px; overflow-y: auto;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="" id="no_group">
+                                    <label class="form-check-label text-muted" for="no_group">
+                                        <i class="fas fa-ban me-1"></i>
+                                        بدون مجموعة
+                                    </label>
+                                </div>
+                                <hr class="my-2">
+                                {% for group in groups %}
+                                <div class="form-check group-option">
+                                    <input class="form-check-input group-checkbox" type="checkbox" name="group_ids"
+                                        value="{{ group.id }}" id="group_{{ group.id }}" data-price="{{ group.price }}">
+                                    <label class="form-check-label" for="group_{{ group.id }}">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>{{ group.name }}</strong>
+                                                <br>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-layer-group me-1"></i>
+                                                    {{ group.level or 'بدون مستوى' }}
+                                                </small>
+                                            </div>
+                                            <div class="text-end">
+                                                <small class="badge bg-info">
+                                                    <i class="fas fa-chalkboard-teacher me-1"></i>
+                                                    {{ group.instructor_ref.name if group.instructor_ref else 'بدون
+                                                    معلم' }}
+                                                </small>
+                                                <br>
+                                                <small class="badge bg-success mt-1">
+                                                    <i class="fas fa-money-bill me-1"></i>
+                                                    {{ group.price }} ج.م
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                اختر المجموعات - السعر سيظهر تلقائياً
+                            </small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">السعر الإجمالي</label>
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h4 class="text-primary mb-0" id="total_price_display">0.00 ج.م</h4>
+                                    <small class="text-muted">إجمالي سعر المجموعات</small>
+                                    <div class="mt-2">
+                                        <small class="text-info" id="selected_groups_count">لم يتم اختيار
+                                            مجموعات</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-calculator me-1"></i>
+                                يتم الحساب تلقائياً عند اختيار المجموعات
+                            </small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="registration_date" class="form-label">تاريخ التسجيل *</label>
+                            <div class="input-group">
+                                <input type="date" class="form-control" id="registration_date" name="registration_date"
+                                    required>
+                                <button type="button" class="btn btn-outline-secondary"
+                                    onclick="setTodayDate('registration_date')">
+                                    <i class="fas fa-calendar-day me-1"></i>
+                                    اليوم
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>
+                        حفظ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Student Modal -->
+<div class="modal fade" id="editStudentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">تعديل بيانات الطالب</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editStudentForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">الاسم</label>
+                        <input type="text" class="form-control" name="name" id="editName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">رقم الهاتف</label>
+                        <input type="tel" class="form-control" name="phone" id="editPhone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">العمر</label>
+                        <input type="number" class="form-control" name="age" id="editAge" min="1" max="100" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">البلد/المنطقة</label>
+                        <input type="text" class="form-control" name="location" id="editLocation"
+                            placeholder="أدخل المنطقة أو البلد">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">المجموعات (اختياري)</label>
+                            <div class="border rounded p-3" style="max-height: 250px; overflow-y: auto;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="" id="edit_no_group">
+                                    <label class="form-check-label text-muted" for="edit_no_group">
+                                        <i class="fas fa-ban me-1"></i>
+                                        بدون مجموعة
+                                    </label>
+                                </div>
+                                <hr class="my-2">
+                                {% for group in groups %}
+                                <div class="form-check group-option">
+                                    <input class="form-check-input edit-group-checkbox" type="checkbox" name="group_ids"
+                                        value="{{ group.id }}" id="edit_group_{{ group.id }}"
+                                        data-price="{{ group.price }}">
+                                    <label class="form-check-label" for="edit_group_{{ group.id }}">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>{{ group.name }}</strong>
+                                                <br>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-layer-group me-1"></i>
+                                                    {{ group.level or 'بدون مستوى' }}
+                                                </small>
+                                            </div>
+                                            <div class="text-end">
+                                                <small class="badge bg-info">
+                                                    <i class="fas fa-chalkboard-teacher me-1"></i>
+                                                    {{ group.instructor_ref.name if group.instructor_ref else 'بدون
+                                                    معلم' }}
+                                                </small>
+                                                <br>
+                                                <small class="badge bg-success mt-1">
+                                                    <i class="fas fa-money-bill me-1"></i>
+                                                    {{ group.price }} ج.م
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                السعر الإجمالي = مجموع أسعار المجموعات المختارة
+                            </small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">السعر الإجمالي</label>
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h4 class="text-primary mb-0" id="edit_total_price_display">0 ج.م</h4>
+                                    <small class="text-muted">إجمالي سعر المجموعات</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">تاريخ التسجيل</label>
+                        <div class="input-group">
+                            <input type="date" class="form-control" name="registration_date" id="editRegistrationDate"
+                                required>
+                            <button type="button" class="btn btn-outline-secondary"
+                                onclick="setTodayDate('editRegistrationDate')">
+                                <i class="fas fa-calendar-day me-1"></i>
+                                اليوم
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function editStudent(id, name, phone, age, location, groupIds, registrationDate) {
+        document.getElementById('editStudentForm').action = `/edit_student/${id}`;
+        document.getElementById('editName').value = name;
+        document.getElementById('editPhone').value = phone;
+        document.getElementById('editAge').value = age;
+        document.getElementById('editLocation').value = location;
+        document.getElementById('editRegistrationDate').value = registrationDate;
+
+        // Clear all group checkboxes first
+        const groupCheckboxes = document.querySelectorAll('input[name="group_ids"]');
+        groupCheckboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+
+        // Check the groups that the student is currently in
+        if (Array.isArray(groupIds) && groupIds.length > 0) {
+            groupIds.forEach(groupId => {
+                const checkbox = document.getElementById(`edit_group_${groupId}`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
+        }
+
+        // Calculate and display total price for selected groups
+        calculateEditTotalPrice();
+
+        new bootstrap.Modal(document.getElementById('editStudentModal')).show();
+    }
+
+    function setTodayDate(inputId) {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const formattedDate = `${year}-${month}-${day}`;
+
+        document.getElementById(inputId).value = formattedDate;
+    }
+
+    // deleteStudent function is now in common.js
+
+    // Add JavaScript to handle "No Group" checkbox behavior
+    document.addEventListener('DOMContentLoaded', function () {
+        // Handle "No Group" checkbox in add modal
+        const noGroupAdd = document.getElementById('no_group');
+        const groupCheckboxesAdd = document.querySelectorAll('#addStudentModal input[name="group_ids"]');
+
+        if (noGroupAdd) {
+            noGroupAdd.addEventListener('change', function () {
+                if (this.checked) {
+                    groupCheckboxesAdd.forEach(cb => cb.checked = false);
+                }
+            });
+        }
+
+        groupCheckboxesAdd.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                if (this.checked && noGroupAdd) {
+                    noGroupAdd.checked = false;
+                }
+            });
+        });
+
+        // Handle "No Group" checkbox in edit modal
+        const noGroupEdit = document.getElementById('edit_no_group');
+        const groupCheckboxesEdit = document.querySelectorAll('#editStudentModal input[name="group_ids"]');
+
+        if (noGroupEdit) {
+            noGroupEdit.addEventListener('change', function () {
+                if (this.checked) {
+                    groupCheckboxesEdit.forEach(cb => cb.checked = false);
+                }
+            });
+        }
+
+        groupCheckboxesEdit.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                if (this.checked && noGroupEdit) {
+                    noGroupEdit.checked = false;
+                }
+            });
+        });
+    });
+
+    // Filter functions
+    function submitFilter() {
+        document.getElementById('filterForm').submit();
+    }
+
+    function clearFilters() {
+        document.getElementById('group_filter').value = '';
+        document.getElementById('filterForm').submit();
+    }
+
+    function exportFiltered() {
+        // Simple CSV export of filtered students
+        const students = [];
+        const table = document.querySelector('table tbody');
+        const rows = table.querySelectorAll('tr:not([style*="display: none"])'); // Only visible rows
+
+        // Add header
+        students.push(['#', 'الاسم', 'الهاتف', 'العمر', 'المنطقة', 'المجموعات', 'سعر الكورس', 'المبلغ المدفوع', 'المتبقي', 'تاريخ التسجيل']);
+
+        rows.forEach((row, index) => {
+            if (row.cells.length > 1) { // Skip empty state row
+                const cells = Array.from(row.cells).slice(0, -1); // Exclude actions column
+                const rowData = cells.map(cell => cell.textContent.trim());
+                students.push(rowData);
+            }
+        });
+
+        if (students.length > 1) {
+            const csvContent = students.map(row => row.join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'students_filtered.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showSuccess('تم التصدير بنجاح', 'تم تحميل ملف البيانات بنجاح');
+        } else {
+            showError('لا توجد بيانات', 'لا توجد بيانات للتصدير');
+        }
+    }
+
+    function quickSearch() {
+        const searchText = document.getElementById('search_text').value.toLowerCase();
+        const table = document.querySelector('table tbody');
+        const rows = table.querySelectorAll('tr');
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            if (row.cells.length > 1) { // Skip empty state row
+                const studentName = row.cells[1].textContent.toLowerCase(); // Student name is in second column
+                if (studentName.includes(searchText)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+
+        // Update count badge
+        const badge = document.querySelector('.badge.bg-info');
+        if (badge) {
+            badge.innerHTML = `<i class="fas fa-list-ol me-1"></i>عدد النتائج: ${visibleCount}`;
+        }
+
+        // Show/hide empty state
+        const emptyRow = table.querySelector('tr td[colspan="12"]');
+        if (emptyRow) {
+            if (visibleCount === 0 && searchText.length > 0) {
+                emptyRow.parentElement.style.display = '';
+                emptyRow.innerHTML = `
+                    <td colspan="12" class="text-center text-muted py-4">
+                        <i class="fas fa-search fa-3x mb-3"></i>
+                        <p>لا توجد نتائج للبحث عن: "${document.getElementById('search_text').value}"</p>
+                        <button class="btn btn-outline-primary btn-sm" onclick="clearSearch()">
+                            <i class="fas fa-times me-1"></i>
+                            مسح البحث
+                        </button>
+                    </td>
+                `;
+            } else if (visibleCount > 0) {
+                emptyRow.parentElement.style.display = 'none';
+            }
+        }
+    }
+
+    function clearSearch() {
+        document.getElementById('search_text').value = '';
+        quickSearch();
+    }
+
+    // Function to open WhatsApp with formatted phone number
+    function openWhatsApp(phoneNumber) {
+        // Remove all non-digit characters except + at the beginning
+        let cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
+
+        // If phone doesn't start with +, assume it's an Egyptian number and add +20
+        if (!cleanPhone.startsWith('+')) {
+            // Remove leading zero if present for Egyptian numbers
+            if (cleanPhone.startsWith('0')) {
+                cleanPhone = cleanPhone.substring(1);
+            }
+            cleanPhone = '+20' + cleanPhone;
+        }
+
+        // Open WhatsApp
+        const whatsappUrl = `https://wa.me/${cleanPhone}`;
+        window.open(whatsappUrl, '_blank');
+    }
+
+    // Function to calculate total price for add form
+    function calculateTotalPrice() {
+        let totalPrice = 0;
+        const checkboxes = document.querySelectorAll('.group-checkbox:checked');
+        const countElement = document.getElementById('selected_groups_count');
+
+        console.log('Calculating total price...', checkboxes.length, 'groups selected');
+
+        checkboxes.forEach(checkbox => {
+            const price = parseFloat(checkbox.getAttribute('data-price')) || 0;
+            console.log('Group price:', price);
+            totalPrice += price;
+        });
+
+        console.log('Total price:', totalPrice);
+        const displayElement = document.getElementById('total_price_display');
+        if (displayElement) {
+            displayElement.textContent = totalPrice.toFixed(2) + ' ج.م';
+        }
+
+        // Update selected groups count
+        if (countElement) {
+            if (checkboxes.length === 0) {
+                countElement.textContent = 'لم يتم اختيار مجموعات';
+                countElement.className = 'text-muted';
+            } else if (checkboxes.length === 1) {
+                countElement.textContent = 'مجموعة واحدة مختارة';
+                countElement.className = 'text-success';
+            } else {
+                countElement.textContent = `${checkboxes.length} مجموعات مختارة`;
+                countElement.className = 'text-success';
+            }
+        }
+    }
+
+    // Function to calculate total price for edit form
+    function calculateEditTotalPrice() {
+        let totalPrice = 0;
+        const checkboxes = document.querySelectorAll('.edit-group-checkbox:checked');
+
+        checkboxes.forEach(checkbox => {
+            const price = parseFloat(checkbox.getAttribute('data-price')) || 0;
+            totalPrice += price;
+        });
+
+        const displayElement = document.getElementById('edit_total_price_display');
+        if (displayElement) {
+            displayElement.textContent = totalPrice.toFixed(2) + ' ج.م';
+        }
+    }
+
+    // Add event listeners for group selection changes
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log('DOM loaded, setting up event listeners...');
+
+        // Add form listeners
+        const groupCheckboxes = document.querySelectorAll('.group-checkbox');
+        console.log('Found', groupCheckboxes.length, 'group checkboxes for add form');
+
+        groupCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                console.log('Group checkbox changed:', this.value, this.checked);
+                calculateTotalPrice();
+            });
+        });
+
+        // Edit form listeners
+        const editGroupCheckboxes = document.querySelectorAll('.edit-group-checkbox');
+        console.log('Found', editGroupCheckboxes.length, 'group checkboxes for edit form');
+
+        editGroupCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                console.log('Edit group checkbox changed:', this.value, this.checked);
+                calculateEditTotalPrice();
+            });
+        });
+
+        // Handle "No Group" checkbox in add modal
+        const noGroupAdd = document.getElementById('no_group');
+        const groupCheckboxesAdd = document.querySelectorAll('#addStudentModal input[name="group_ids"]');
+
+        if (noGroupAdd) {
+            noGroupAdd.addEventListener('change', function () {
+                if (this.checked) {
+                    groupCheckboxesAdd.forEach(cb => {
+                        cb.checked = false;
+                    });
+                    calculateTotalPrice();
+                }
+            });
+        }
+
+        groupCheckboxesAdd.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                if (this.checked && noGroupAdd) {
+                    noGroupAdd.checked = false;
+                }
+                calculateTotalPrice();
+            });
+        });
+
+        // Handle "No Group" checkbox in edit modal
+        const noGroupEdit = document.getElementById('edit_no_group');
+        const groupCheckboxesEdit = document.querySelectorAll('#editStudentModal input[name="group_ids"]');
+
+        if (noGroupEdit) {
+            noGroupEdit.addEventListener('change', function () {
+                if (this.checked) {
+                    groupCheckboxesEdit.forEach(cb => {
+                        cb.checked = false;
+                    });
+                    calculateEditTotalPrice();
+                }
+            });
+        }
+
+        groupCheckboxesEdit.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                if (this.checked && noGroupEdit) {
+                    noGroupEdit.checked = false;
+                }
+                calculateEditTotalPrice();
+            });
+        });
+
+        // Reset price display when modals are opened
+        document.getElementById('addStudentModal').addEventListener('show.bs.modal', function () {
+            console.log('Add student modal opened, resetting price');
+            document.getElementById('total_price_display').textContent = '0.00 ج.م';
+        });
+
+        document.getElementById('editStudentModal').addEventListener('show.bs.modal', function () {
+            console.log('Edit student modal opened');
+            calculateEditTotalPrice();
+        });
+    });
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Enhanced Group Selection Styles */
+    .group-option {
+        margin-bottom: 8px;
+        padding: 8px;
+        border-radius: 6px;
+        transition: background-color 0.2s ease;
+    }
+
+    .group-option:hover {
+        background-color: #f8f9fa;
+    }
+
+    .group-option input[type="checkbox"]:checked+label {
+        background-color: #e8f4f8;
+        border-left: 3px solid #17a2b8;
+        padding-left: 12px;
+        border-radius: 4px;
+    }
+
+    .group-option label {
+        margin-bottom: 0;
+        cursor: pointer;
+        width: 100%;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+    }
+
+    .group-option .badge {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+    }
+
+    /* Make sure group options have enough space */
+    .group-option .d-flex {
+        min-height: 40px;
+        align-items: center;
+    }
+
+    /* Style for instructor badges */
+    .group-option .badge.bg-info {
+        background-color: #17a2b8 !important;
+        color: white;
+    }
+
+    /* Enhanced checkbox styling */
+    .group-option .form-check-input {
+        margin-top: 0.25rem;
+    }
+
+    /* Add some spacing for better readability */
+    .group-option strong {
+        font-size: 0.95rem;
+        color: #333;
+    }
+
+    .group-option small.text-muted {
+        font-size: 0.8rem;
+    }
+</style>
+{% endblock %}
