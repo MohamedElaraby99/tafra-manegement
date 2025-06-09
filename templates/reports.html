@@ -401,6 +401,11 @@
                             <i class="fas fa-search-plus"></i>
                             تشخيص البيانات
                         </button>
+                        <button class="modern-btn" onclick="diagnoseFinancialCalculations()"
+                            style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
+                            <i class="fas fa-calculator"></i>
+                            تشخيص الحسابات المالية
+                        </button>
                         <form method="POST" action="{{ url_for('fix_import_data') }}" style="display: inline;">
                             <button type="submit" class="modern-btn"
                                 style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); color: #721c24;"
@@ -919,6 +924,204 @@
                 form.submit();
             }
         }
+    }
+
+    // Function to diagnose financial calculations
+    function diagnoseFinancialCalculations() {
+        // Show loading state
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التشخيص المالي...';
+        btn.disabled = true;
+
+        fetch('/diagnose_financial_calculations', {
+            method: 'GET'
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Create and show financial diagnosis modal
+                    showFinancialDiagnosisModal(data.diagnosis);
+                } else {
+                    alert('خطأ في التشخيص المالي: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('خطأ في الشبكة أثناء التشخيص المالي');
+            })
+            .finally(() => {
+                // Restore button state
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+    }
+
+    function showFinancialDiagnosisModal(diagnosis) {
+        let modalHtml = `
+            <div class="modal fade" id="financialDiagnosisModal" tabindex="-1">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-calculator me-2"></i>
+                                تشخيص الحسابات المالية
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+        `;
+
+        // Summary section
+        modalHtml += `
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="text-success">${diagnosis.total_revenue.toFixed(2)}</h5>
+                            <small>إجمالي الإيرادات (فعلي)</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="text-warning">${diagnosis.pending_payments.toFixed(2)}</h5>
+                            <small>مدفوعات معلقة</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <h5 class="text-primary">${diagnosis.total_groups_revenue.toFixed(2)}</h5>
+                            <small>إيرادات متوقعة</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Logical consistency check
+        modalHtml += `
+            <div class="alert ${diagnosis.logical_consistency_check ? 'alert-success' : 'alert-danger'}">
+                <h6>
+                    <i class="fas ${diagnosis.logical_consistency_check ? 'fa-check-circle' : 'fa-exclamation-triangle'} me-2"></i>
+                    فحص التناسق المنطقي
+                </h6>
+                <p class="mb-2">
+                    <strong>المعادلة:</strong> إجمالي الإيرادات + مدفوعات معلقة = إيرادات متوقعة
+                </p>
+                <p class="mb-2">
+                    <strong>الحساب:</strong> ${diagnosis.total_revenue.toFixed(2)} + ${diagnosis.pending_payments.toFixed(2)} = ${diagnosis.calculated_total_should_equal_expected.toFixed(2)}
+                </p>
+                <p class="mb-1">
+                    <strong>النتيجة المتوقعة:</strong> ${diagnosis.total_groups_revenue.toFixed(2)}
+                </p>
+                <p class="mb-0">
+                    <strong>الفرق:</strong> ${diagnosis.difference.toFixed(2)}
+                    ${diagnosis.logical_consistency_check ? ' ✅ صحيح' : ' ❌ يوجد خلل'}
+                </p>
+            </div>
+        `;
+
+        // Issues detected
+        if (diagnosis.groups_with_zero_price.length > 0) {
+            modalHtml += `
+                <div class="alert alert-warning">
+                    <h6><i class="fas fa-exclamation-triangle me-2"></i>مجموعات بسعر صفر (${diagnosis.groups_with_zero_price.length})</h6>
+                    <p class="mb-0">${diagnosis.groups_with_zero_price.join(', ')}</p>
+                </div>
+            `;
+        }
+
+        if (diagnosis.students_with_negative_balance.length > 0) {
+            modalHtml += `
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-minus-circle me-2"></i>طلاب برصيد سالب (${diagnosis.students_with_negative_balance.length})</h6>
+                    <p class="mb-0">${diagnosis.students_with_negative_balance.join(', ')}</p>
+                </div>
+            `;
+        }
+
+        if (diagnosis.students_with_issues.length > 0) {
+            modalHtml += `
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-bug me-2"></i>طلاب بأخطاء في الحساب (${diagnosis.students_with_issues.length})</h6>
+                    <p class="mb-0">${diagnosis.students_with_issues.join(', ')}</p>
+                </div>
+            `;
+        }
+
+        // Student details table
+        if (diagnosis.student_details.length > 0) {
+            modalHtml += `
+                <div class="mt-4">
+                    <h6>تفاصيل عينة من الطلاب (أول 10 طلاب):</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>الطالب</th>
+                                    <th>المجموعات</th>
+                                    <th>إجمالي السعر</th>
+                                    <th>الخصم</th>
+                                    <th>بعد الخصم</th>
+                                    <th>المدفوع</th>
+                                    <th>المتبقي (فعلي)</th>
+                                    <th>المتبقي (متوقع)</th>
+                                    <th>صحة الحساب</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+
+            diagnosis.student_details.forEach(student => {
+                const isCorrect = Math.abs(student.remaining_balance - student.expected_remaining) < 0.01;
+                modalHtml += `
+                    <tr class="${isCorrect ? '' : 'table-danger'}">
+                        <td>${student.name}</td>
+                        <td><small>${student.groups.join(', ')}</small></td>
+                        <td>${student.total_group_price.toFixed(2)}</td>
+                        <td>${student.discount.toFixed(2)}</td>
+                        <td>${student.calculated_price_after_discount.toFixed(2)}</td>
+                        <td>${student.total_paid.toFixed(2)}</td>
+                        <td>${student.remaining_balance.toFixed(2)}</td>
+                        <td>${student.expected_remaining.toFixed(2)}</td>
+                        <td>${isCorrect ? '✅' : '❌'}</td>
+                    </tr>
+                `;
+            });
+
+            modalHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        modalHtml += `
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                            <button type="button" class="btn btn-info" onclick="location.reload()">تحديث الصفحة</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('financialDiagnosisModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add modal to body and show
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById('financialDiagnosisModal'));
+        modal.show();
     }
 
     // Add smooth scroll to top when page loads

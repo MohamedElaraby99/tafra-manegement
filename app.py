@@ -111,7 +111,8 @@ class Student(db.Model):
     @property
     def remaining_balance(self):
         """Calculate remaining balance for the student after discount"""
-        return self.total_course_price_after_discount - self.total_paid
+        balance = self.total_course_price_after_discount - self.total_paid
+        return max(0, balance)  # Ensure we don't return negative balance as pending payment
 
 class Group(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -4083,6 +4084,8 @@ def diagnose_import_data():
             'message': f'خطأ في تشخيص البيانات: {str(e)}'
         })
 
+
+
 @app.route('/fix_import_data', methods=['POST'])
 @admin_required
 def fix_import_data():
@@ -4198,6 +4201,80 @@ def fix_import_data():
         flash(f'حدث خطأ أثناء الإصلاح: {str(e)}', 'error')
     
     return redirect(url_for('reports'))
+
+@app.route('/diagnose_financial_calculations', methods=['GET'])
+@admin_required
+def diagnose_financial_calculations():
+    """Diagnose financial calculations to check for logical errors"""
+    try:
+        # Get all financial data
+        total_revenue = db.session.query(db.func.sum(Payment.amount)).scalar() or 0
+        
+        # Calculate pending payments manually with detailed logging
+        pending_payments = 0
+        students = Student.query.all()
+        student_details = []
+        
+        for student in students:
+            student_groups = [group.name for group in student.groups]
+            total_group_prices = sum(group.price for group in student.groups)
+            
+            student_detail = {
+                'name': student.name,
+                'groups': student_groups,
+                'group_prices': [group.price for group in student.groups],
+                'total_group_price': total_group_prices,
+                'discount': student.discount,
+                'total_paid': student.total_paid,
+                'calculated_price_after_discount': total_group_prices - student.discount,
+                'remaining_balance': student.remaining_balance,
+                'expected_remaining': max(0, (total_group_prices - student.discount) - student.total_paid)
+            }
+            
+            student_details.append(student_detail)
+            
+            if student.remaining_balance > 0:
+                pending_payments += student.remaining_balance
+        
+        # Calculate expected revenue manually
+        total_groups_revenue = sum(student.total_course_price_after_discount for student in students)
+        
+        # Manual calculation for verification
+        manual_expected_revenue = sum(max(0, sum(group.price for group in student.groups) - student.discount) for student in students)
+        
+        # Check logical consistency
+        calculated_total = total_revenue + pending_payments
+        
+        diagnosis = {
+            'total_revenue': total_revenue,
+            'pending_payments': pending_payments,
+            'total_groups_revenue': total_groups_revenue,
+            'manual_expected_revenue': manual_expected_revenue,
+            'calculated_total_should_equal_expected': calculated_total,
+            'logical_consistency_check': abs(calculated_total - total_groups_revenue) < 0.01,
+            'manual_vs_property_consistency': abs(manual_expected_revenue - total_groups_revenue) < 0.01,
+            'difference': calculated_total - total_groups_revenue,
+            'students_count': len(students),
+            'student_details': student_details[:10],  # First 10 students for detailed view
+            'payments_count': Payment.query.count(),
+            'groups_with_zero_price': [group.name for group in Group.query.filter_by(price=0.0).all()],
+            'students_with_negative_balance': [s.name for s in students if s.remaining_balance < 0],
+            'students_with_issues': [
+                s.name for s in students 
+                if abs(s.remaining_balance - max(0, (sum(g.price for g in s.groups) - s.discount) - s.total_paid)) > 0.01
+            ]
+        }
+        
+        return jsonify({
+            'success': True,
+            'diagnosis': diagnosis
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'خطأ في التشخيص المالي: {str(e)}'
+        })
 
 if __name__ == '__main__':
     init_db()
