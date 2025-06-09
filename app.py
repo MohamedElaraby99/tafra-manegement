@@ -468,25 +468,45 @@ def get_weekly_schedule():
     weekly_schedule = {}
     
     for day in arabic_days:
+        # Get schedules for this day
         day_schedules = Schedule.query.filter_by(day_of_week=day).all()
         schedule_data = []
         
         for schedule in day_schedules:
             group = Group.query.get(schedule.group_id)
-            if group and group.instructor_ref:
+            # Include schedules even if group doesn't have instructor (with default values)
+            if group:
+                instructor_name = group.instructor_ref.name if group.instructor_ref else 'غير محدد'
                 schedule_data.append({
                     'group_name': group.name,
-                    'instructor_name': group.instructor_ref.name,
+                    'instructor_name': instructor_name,
                     'start_time': schedule.start_time,
                     'end_time': schedule.end_time,
-                    'level': group.level,
+                    'level': group.level or 'عام',
                     'student_count': group.students.count(),  # Use count() for dynamic relationship
-                    'max_students': group.max_students,  # Add max_students field
+                    'max_students': group.max_students or 15,  # Default to 15 if not set
                     'group_id': group.id
+                })
+            else:
+                # Handle orphaned schedules (group was deleted but schedule remains)
+                schedule_data.append({
+                    'group_name': 'مجموعة محذوفة',
+                    'instructor_name': 'غير محدد',
+                    'start_time': schedule.start_time,
+                    'end_time': schedule.end_time,
+                    'level': 'غير محدد',
+                    'student_count': 0,
+                    'max_students': 15,
+                    'group_id': 0
                 })
         
         # Sort by start time
-        schedule_data.sort(key=lambda x: x['start_time'])
+        try:
+            schedule_data.sort(key=lambda x: datetime.strptime(x['start_time'], '%H:%M').time())
+        except:
+            # Fallback to string sorting if time parsing fails
+            schedule_data.sort(key=lambda x: x['start_time'])
+        
         weekly_schedule[day] = schedule_data
     
     return weekly_schedule
@@ -1165,6 +1185,9 @@ def reports():
         month = expense.date.month
         monthly_expenses[month] = monthly_expenses.get(month, 0) + expense.amount
     
+    # Get groups data for health check
+    groups_count_list = Group.query.all()
+    
     return render_template('reports.html',
                          total_students=total_students,
                          present_today=present_today,
@@ -1177,7 +1200,8 @@ def reports():
                          today_date=datetime.now(),  # Pass datetime object instead of string
                          total_groups_revenue=total_groups_revenue,
                          monthly_payments=monthly_payments,
-                         monthly_expenses=monthly_expenses)
+                         monthly_expenses=monthly_expenses,
+                         groups_count_list=groups_count_list)
 
 @app.route('/export_reports')
 @login_required
@@ -3383,7 +3407,53 @@ def import_system_data():
                         name = str(row[1]).strip()
                         level = str(row[2]).strip() if row[2] and str(row[2]).strip() != 'غير محدد' else None
                         instructor_name = str(row[3]).strip() if row[3] and str(row[3]).strip() != 'غير محدد' else None
-                        price = float(str(row[4]).replace(',', '')) if row[4] else 0.0
+                        
+                        # Enhanced price handling - handle various formats including Excel's numeric formatting
+                        price = 0.0
+                        if row[4] is not None:
+                            try:
+                                # Handle Excel numeric values with General format fix
+                                if isinstance(row[4], (int, float)):
+                                    price = float(row[4])
+                                    # Handle Excel General format issue for group prices
+                                    if price > 0 and price < 50:
+                                        print(f"⚠️ سعر مجموعة صغير مشتبه: {price} للمجموعة {name} - سيتم ضربه في 100")
+                                        price = price * 100
+                                else:
+                                    # Handle string values
+                                    price_value = str(row[4]).replace(',', '').replace('ج.م', '').replace('جنيه', '').replace('EGP', '').strip()
+                                    # Remove currency symbols and extra spaces
+                                    price_value = price_value.replace('$', '').replace('£', '').replace('€', '')
+                                    
+                                    # Extract numeric value using regex
+                                    import re
+                                    numeric_match = re.search(r'(\d+(?:\.\d+)?)', price_value)
+                                    if numeric_match:
+                                        price = float(numeric_match.group(1))
+                                        # Apply same fix for string values
+                                        if price > 0 and price < 50:
+                                            print(f"⚠️ سعر مجموعة نصي صغير مشتبه: {price} للمجموعة {name} - سيتم ضربه في 100")
+                                            price = price * 100
+                                    else:
+                                        price = 0.0
+                                
+                                # Ensure reasonable price range after corrections
+                                if price < 0:
+                                    price = 0.0
+                                elif price > 100000:  # Sanity check for very large prices
+                                    price = 0.0
+                                
+                                # Debug log for price issues - with more detail
+                                if price == 0.0 and row[4] is not None:
+                                    import_summary['errors'].append(f'تحذير: لم يتم التعرف على السعر للمجموعة {name}: القيمة الأصلية = {row[4]} (نوع: {type(row[4]).__name__})')
+                                else:
+                                    # Log successful price parsing for verification
+                                    print(f"✓ مجموعة {name}: السعر = {price} (من القيمة الأصلية: {row[4]})")
+                                    
+                            except (ValueError, TypeError) as e:
+                                price = 0.0
+                                import_summary['errors'].append(f'خطأ في قراءة السعر للمجموعة {name}: القيمة الأصلية = {row[4]} (نوع: {type(row[4]).__name__}) - {str(e)}')
+                        
                         max_students = int(row[5]) if row[5] else 15
                         
                         # Find instructor by name
@@ -3410,16 +3480,59 @@ def import_system_data():
                 db.session.commit()
             
             # Import Schedules
-            if 'الجداول' in wb.sheetnames:
-                ws = wb['الجداول']
+            if 'الجداول' in wb.sheetnames or 'الجداول الزمنية' in wb.sheetnames:
+                # Try both possible sheet names
+                sheet_name = 'الجداول' if 'الجداول' in wb.sheetnames else 'الجداول الزمنية'
+                ws = wb[sheet_name]
                 for row in ws.iter_rows(min_row=2, values_only=True):
                     if not row[0] or not row[1]:  # Skip empty rows
                         continue
                     try:
                         group_name = str(row[1]).strip()
-                        day_of_week = str(row[2]).strip()
-                        start_time = str(row[3]).strip()
-                        end_time = str(row[4]).strip()
+                        day_of_week = str(row[2]).strip() if row[2] else str(row[3]).strip()  # Try column 2 or 3 for day
+                        
+                        # Handle different time formats
+                        start_time = str(row[3]).strip() if len(row) > 3 and row[3] else str(row[4]).strip() if len(row) > 4 and row[4] else ''
+                        end_time = str(row[4]).strip() if len(row) > 4 and row[4] else str(row[5]).strip() if len(row) > 5 and row[5] else ''
+                        
+                        # If start_time looks like day and end_time looks like time, swap them
+                        arabic_days = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة']
+                        if start_time in arabic_days and ':' in end_time:
+                            day_of_week = start_time
+                            start_time = end_time
+                            end_time = str(row[5]).strip() if len(row) > 5 and row[5] else ''
+                        
+                        # Clean and validate time format
+                        def clean_time(time_str):
+                            if not time_str:
+                                return ''
+                            # Remove any non-time characters
+                            time_str = str(time_str).strip()
+                            # Handle 12-hour format conversion if needed
+                            if 'ص' in time_str or 'م' in time_str:
+                                # Convert Arabic 12-hour to 24-hour
+                                time_str = time_str.replace('ص', 'AM').replace('م', 'PM')
+                                try:
+                                    time_obj = datetime.strptime(time_str.replace(' ', ''), '%I:%M%p')
+                                    return time_obj.strftime('%H:%M')
+                                except:
+                                    pass
+                            # Extract time pattern HH:MM
+                            import re
+                            time_match = re.search(r'(\d{1,2}):(\d{2})', time_str)
+                            if time_match:
+                                hour, minute = time_match.groups()
+                                hour = int(hour)
+                                minute = int(minute)
+                                if 0 <= hour <= 23 and 0 <= minute <= 59:
+                                    return f"{hour:02d}:{minute:02d}"
+                            return ''
+                        
+                        start_time = clean_time(start_time)
+                        end_time = clean_time(end_time)
+                        
+                        if not start_time or not end_time:
+                            continue
                         
                         # Find group by name
                         group = Group.query.filter_by(name=group_name).first()
@@ -3463,21 +3576,65 @@ def import_system_data():
                         instructor_name = str(row[5]).strip() if row[5] and str(row[5]).strip() != 'غير محدد' else None
                         groups_names = str(row[6]).strip() if row[6] and str(row[6]).strip() != 'لا توجد مجموعات' else ''
                         
-                        # Extract discount if available (column 8)
-                        discount = 0.0
-                        if len(row) > 8 and row[8]:
+                        # Helper function to parse numeric values correctly with Excel General format handling
+                        def parse_numeric_value(value, field_name="", expected_range=None):
+                            if value is None:
+                                return 0.0
+                            
                             try:
-                                discount = float(str(row[8]).replace(',', ''))
-                            except:
-                                discount = 0.0
+                                # If it's already a numeric type
+                                if isinstance(value, (int, float)):
+                                    result = float(value)
+                                    
+                                    # Handle Excel General format issue where values appear divided by 100
+                                    # If we expect prices/payments to be >= 50 and we get a decimal < 50, multiply by 100
+                                    if expected_range and expected_range == 'price' and result > 0 and result < 50:
+                                        print(f"⚠️ قيمة صغيرة مشتبهة: {result} - سيتم ضربها في 100")
+                                        result = result * 100
+                                    elif expected_range and expected_range == 'payment' and result > 0 and result < 100:
+                                        print(f"⚠️ قيمة دفع صغيرة مشتبهة: {result} - سيتم ضربها في 100")
+                                        result = result * 100
+                                    
+                                    return result
+                                
+                                # Convert to string and clean
+                                value_str = str(value).strip()
+                                if not value_str or value_str.lower() in ['none', 'null', '']:
+                                    return 0.0
+                                
+                                # Remove common currency symbols and separators
+                                cleaned = value_str.replace(',', '').replace('ج.م', '').replace('جنيه', '')
+                                cleaned = cleaned.replace('EGP', '').replace('$', '').replace('£', '').replace('€', '')
+                                cleaned = cleaned.replace(' ', '').strip()
+                                
+                                # Extract numeric value using regex
+                                import re
+                                numeric_match = re.search(r'(\d+(?:\.\d+)?)', cleaned)
+                                if numeric_match:
+                                    result = float(numeric_match.group(1))
+                                    
+                                    # Apply the same logic for string values
+                                    if expected_range and expected_range == 'price' and result > 0 and result < 50:
+                                        print(f"⚠️ قيمة نصية صغيرة مشتبهة: {result} - سيتم ضربها في 100")
+                                        result = result * 100
+                                    elif expected_range and expected_range == 'payment' and result > 0 and result < 100:
+                                        print(f"⚠️ قيمة دفع نصية صغيرة مشتبهة: {result} - سيتم ضربها في 100")
+                                        result = result * 100
+                                    
+                                    return result
+                                else:
+                                    return 0.0
+                                    
+                            except (ValueError, TypeError) as e:
+                                if field_name:
+                                    import_summary['errors'].append(f'خطأ في قراءة {field_name} للطالب {name}: {value} (نوع: {type(value).__name__}) - {str(e)}')
+                                return 0.0
+                        
+                        # Extract discount if available (column 8)
+                        discount = parse_numeric_value(row[8] if len(row) > 8 else None, "الخصم", "price")
                         
                         # Extract total_paid if available (column 10)
-                        total_paid = 0.0
-                        if len(row) > 10 and row[10]:
-                            try:
-                                total_paid = float(str(row[10]).replace(',', ''))
-                            except:
-                                total_paid = 0.0
+                        total_paid = parse_numeric_value(row[10] if len(row) > 10 else None, "المبلغ المدفوع", "payment")
                         
                         # Extract registration_date if available (column 12)
                         registration_date = datetime.now()
@@ -3536,7 +3693,45 @@ def import_system_data():
                         continue
                     try:
                         student_name = str(row[1]).strip()
-                        amount = float(str(row[2]).replace(',', '')) if row[2] else 0.0
+                        
+                        # Parse payment amount correctly with General format fix
+                        def parse_payment_amount(value):
+                            if value is None:
+                                return 0.0
+                            try:
+                                if isinstance(value, (int, float)):
+                                    result = float(value)
+                                    # Handle Excel General format issue for payments
+                                    if result > 0 and result < 100:
+                                        print(f"⚠️ مبلغ دفع صغير مشتبه للطالب {student_name}: {result} - سيتم ضربه في 100")
+                                        result = result * 100
+                                    return result
+                                
+                                value_str = str(value).strip()
+                                if not value_str:
+                                    return 0.0
+                                
+                                # Remove currency symbols and separators
+                                cleaned = value_str.replace(',', '').replace('ج.م', '').replace('جنيه', '')
+                                cleaned = cleaned.replace('EGP', '').replace('$', '').replace('£', '').replace('€', '')
+                                cleaned = cleaned.replace(' ', '').strip()
+                                
+                                # Extract numeric value
+                                import re
+                                numeric_match = re.search(r'(\d+(?:\.\d+)?)', cleaned)
+                                if numeric_match:
+                                    result = float(numeric_match.group(1))
+                                    # Apply same fix for string values
+                                    if result > 0 and result < 100:
+                                        print(f"⚠️ مبلغ دفع نصي صغير مشتبه للطالب {student_name}: {result} - سيتم ضربه في 100")
+                                        result = result * 100
+                                    return result
+                                else:
+                                    return 0.0
+                            except (ValueError, TypeError):
+                                return 0.0
+                        
+                        amount = parse_payment_amount(row[2])
                         month = str(row[3]).strip() if row[3] else ''
                         notes = str(row[4]).strip() if row[4] else None
                         
@@ -3579,7 +3774,45 @@ def import_system_data():
                         continue
                     try:
                         description = str(row[1]).strip()
-                        amount = float(str(row[2]).replace(',', '')) if row[2] else 0.0
+                        
+                        # Parse expense amount correctly with General format fix
+                        def parse_expense_amount(value):
+                            if value is None:
+                                return 0.0
+                            try:
+                                if isinstance(value, (int, float)):
+                                    result = float(value)
+                                    # Handle Excel General format issue for expenses
+                                    if result > 0 and result < 100:
+                                        print(f"⚠️ مبلغ مصروف صغير مشتبه ({description}): {result} - سيتم ضربه في 100")
+                                        result = result * 100
+                                    return result
+                                
+                                value_str = str(value).strip()
+                                if not value_str:
+                                    return 0.0
+                                
+                                # Remove currency symbols and separators
+                                cleaned = value_str.replace(',', '').replace('ج.م', '').replace('جنيه', '')
+                                cleaned = cleaned.replace('EGP', '').replace('$', '').replace('£', '').replace('€', '')
+                                cleaned = cleaned.replace(' ', '').strip()
+                                
+                                # Extract numeric value
+                                import re
+                                numeric_match = re.search(r'(\d+(?:\.\d+)?)', cleaned)
+                                if numeric_match:
+                                    result = float(numeric_match.group(1))
+                                    # Apply same fix for string values
+                                    if result > 0 and result < 100:
+                                        print(f"⚠️ مبلغ مصروف نصي صغير مشتبه ({description}): {result} - سيتم ضربه في 100")
+                                        result = result * 100
+                                    return result
+                                else:
+                                    return 0.0
+                            except (ValueError, TypeError):
+                                return 0.0
+                        
+                        amount = parse_expense_amount(row[2])
                         category = str(row[3]).strip() if row[3] else 'أخرى'
                         notes = str(row[4]).strip() if row[4] else None
                         
@@ -3609,7 +3842,32 @@ def import_system_data():
                 
                 db.session.commit()
             
-            # Generate success message
+            # Validate imported data and provide detailed feedback
+            validation_issues = []
+            
+            # Check for groups with zero prices
+            zero_price_groups = Group.query.filter_by(price=0.0).all()
+            if zero_price_groups:
+                group_names = [g.name for g in zero_price_groups[:3]]
+                if len(zero_price_groups) > 3:
+                    group_names.append(f'و {len(zero_price_groups) - 3} مجموعات أخرى')
+                validation_issues.append(f'تحذير: {len(zero_price_groups)} مجموعة بسعر صفر: {", ".join(group_names)}')
+            
+            # Check for schedules without groups
+            orphaned_schedules = Schedule.query.filter(~Schedule.group_id.in_(
+                db.session.query(Group.id).subquery()
+            )).count()
+            if orphaned_schedules > 0:
+                validation_issues.append(f'تحذير: {orphaned_schedules} جدول زمني بدون مجموعة مرتبطة')
+            
+            # Check for groups without schedules
+            groups_without_schedules = Group.query.filter(~Group.id.in_(
+                db.session.query(Schedule.group_id).filter(Schedule.group_id.isnot(None)).subquery()
+            )).count()
+            if groups_without_schedules > 0:
+                validation_issues.append(f'تحذير: {groups_without_schedules} مجموعة بدون جدول زمني')
+            
+            # Generate success message with detailed statistics
             success_msg = f"تم استيراد البيانات بنجاح! "
             success_msg += f"المستخدمين: {import_summary['users']}, "
             success_msg += f"المدرسين: {import_summary['instructors']}, "
@@ -3620,6 +3878,10 @@ def import_system_data():
             success_msg += f"المصروفات: {import_summary['expenses']}"
             
             flash(success_msg, 'success')
+            
+            # Show validation issues
+            for issue in validation_issues:
+                flash(issue, 'info')
             
             # Show errors if any
             if import_summary['errors']:
@@ -3710,6 +3972,232 @@ def admin_update_instructor_note_status(note_id):
         flash('حدث خطأ أثناء تحديث حالة الملاحظة', 'error')
     
     return redirect(url_for('tasks') + '#instructor-notes')
+
+@app.route('/diagnose_import_data', methods=['GET'])
+@admin_required
+def diagnose_import_data():
+    """Diagnose and show details about imported data"""
+    try:
+        diagnosis = {
+            'groups_with_issues': [],
+            'students_with_issues': [],
+            'payments_with_issues': [],
+            'expenses_with_issues': []
+        }
+        
+        # Check groups with unusual prices
+        groups = Group.query.all()
+        for group in groups:
+            issue = None
+            if group.price == 0.0:
+                issue = 'سعر صفر'
+            elif group.price > 0 and group.price < 50:
+                issue = 'سعر صغير مشتبه (ربما Excel General format)'
+            elif group.price < 10:
+                issue = 'سعر صغير جداً'
+            elif group.price > 10000:
+                issue = 'سعر مرتفع جداً'
+                
+            if issue:
+                diagnosis['groups_with_issues'].append({
+                    'id': group.id,
+                    'name': group.name,
+                    'price': group.price,
+                    'issue': issue
+                })
+        
+        # Check students with unusual amounts
+        students = Student.query.all()
+        for student in students:
+            issues = []
+            if student.discount < 0:
+                issues.append('خصم سالب')
+            if student.total_paid < 0:
+                issues.append('مبلغ مدفوع سالب')
+            if student.discount > 0 and student.discount < 50:
+                issues.append('خصم صغير مشتبه (ربما Excel General format)')
+            if student.total_paid > 0 and student.total_paid < 100:
+                issues.append('مبلغ مدفوع صغير مشتبه (ربما Excel General format)')
+            if student.discount > 5000:
+                issues.append('خصم مرتفع جداً')
+            if student.total_paid > 50000:
+                issues.append('مبلغ مدفوع مرتفع جداً')
+                
+            if issues:
+                diagnosis['students_with_issues'].append({
+                    'id': student.id,
+                    'name': student.name,
+                    'discount': student.discount,
+                    'total_paid': student.total_paid,
+                    'issues': ', '.join(issues)
+                })
+        
+        # Check payments with unusual amounts
+        payments = Payment.query.all()
+        for payment in payments:
+            issue = None
+            if payment.amount <= 0:
+                issue = 'مبلغ صفر أو سالب'
+            elif payment.amount > 0 and payment.amount < 100:
+                issue = 'مبلغ صغير مشتبه (ربما Excel General format)'
+            elif payment.amount > 50000:
+                issue = 'مبلغ مرتفع جداً'
+                
+            if issue:
+                diagnosis['payments_with_issues'].append({
+                    'id': payment.id,
+                    'student_name': payment.student.name if payment.student else 'غير محدد',
+                    'amount': payment.amount,
+                    'date': payment.date,
+                    'issue': issue
+                })
+        
+        # Check expenses with unusual amounts
+        expenses = Expense.query.all()
+        for expense in expenses:
+            issue = None
+            if expense.amount <= 0:
+                issue = 'مبلغ صفر أو سالب'
+            elif expense.amount > 0 and expense.amount < 100:
+                issue = 'مبلغ صغير مشتبه (ربما Excel General format)'
+            elif expense.amount > 100000:
+                issue = 'مبلغ مرتفع جداً'
+                
+            if issue:
+                diagnosis['expenses_with_issues'].append({
+                    'id': expense.id,
+                    'description': expense.description,
+                    'amount': expense.amount,
+                    'date': expense.date,
+                    'issue': issue
+                })
+        
+        return jsonify({
+            'success': True,
+            'diagnosis': diagnosis
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'خطأ في تشخيص البيانات: {str(e)}'
+        })
+
+@app.route('/fix_import_data', methods=['POST'])
+@admin_required
+def fix_import_data():
+    """Fix common issues after data import"""
+    try:
+        fixed_count = 0
+        
+        # Fix groups with zero prices OR suspiciously small prices (Excel General format issue)
+        zero_or_small_price_groups = Group.query.filter(
+            db.or_(Group.price == 0.0, db.and_(Group.price > 0, Group.price < 50))
+        ).all()
+        
+        for group in zero_or_small_price_groups:
+            original_price = group.price
+            
+            # If the price looks like it was divided by 100 (Excel General format issue)
+            if group.price > 0 and group.price < 50:
+                group.price = group.price * 100
+                print(f"🔧 إصلاح سعر المجموعة {group.name}: {original_price} → {group.price}")
+                fixed_count += 1
+                continue
+            
+            # Set default prices for zero-price groups based on level and name
+            price = 300.0  # Default price
+            
+            # Check level first
+            if group.level:
+                level_lower = group.level.lower()
+                if 'متقدم' in level_lower or 'advanced' in level_lower:
+                    price = 500.0
+                elif 'متوسط' in level_lower or 'intermediate' in level_lower:
+                    price = 350.0
+                elif 'مبتدئ' in level_lower or 'beginner' in level_lower:
+                    price = 250.0
+            
+            # Check group name for more specific pricing
+            if group.name:
+                name_lower = group.name.lower()
+                if any(keyword in name_lower for keyword in ['انجليزي', 'english', 'ielts', 'toefl']):
+                    price = max(price, 400.0)  # English courses tend to be higher
+                elif any(keyword in name_lower for keyword in ['رياضيات', 'math', 'calculus']):
+                    price = max(price, 350.0)
+                elif any(keyword in name_lower for keyword in ['فيزياء', 'physics', 'كيمياء', 'chemistry']):
+                    price = max(price, 380.0)
+                elif any(keyword in name_lower for keyword in ['برمجة', 'programming', 'كمبيوتر', 'computer']):
+                    price = max(price, 450.0)  # Programming courses tend to be higher
+            
+            group.price = price
+            print(f"🔧 تحديد سعر افتراضي للمجموعة {group.name}: {price}")
+            fixed_count += 1
+        
+        # Fix students with suspiciously small amounts (Excel General format issue)
+        small_discount_students = Student.query.filter(
+            db.and_(Student.discount > 0, Student.discount < 50)
+        ).all()
+        
+        for student in small_discount_students:
+            original_discount = student.discount
+            student.discount = student.discount * 100
+            print(f"🔧 إصلاح خصم الطالب {student.name}: {original_discount} → {student.discount}")
+            fixed_count += 1
+        
+        small_paid_students = Student.query.filter(
+            db.and_(Student.total_paid > 0, Student.total_paid < 100)
+        ).all()
+        
+        for student in small_paid_students:
+            original_paid = student.total_paid
+            student.total_paid = student.total_paid * 100
+            print(f"🔧 إصلاح مبلغ مدفوع للطالب {student.name}: {original_paid} → {student.total_paid}")
+            fixed_count += 1
+        
+        # Fix payments with suspiciously small amounts
+        small_payments = Payment.query.filter(
+            db.and_(Payment.amount > 0, Payment.amount < 100)
+        ).all()
+        
+        for payment in small_payments:
+            original_amount = payment.amount
+            payment.amount = payment.amount * 100
+            student_name = payment.student.name if payment.student else 'غير محدد'
+            print(f"🔧 إصلاح مبلغ دفع للطالب {student_name}: {original_amount} → {payment.amount}")
+            fixed_count += 1
+        
+        # Fix expenses with suspiciously small amounts
+        small_expenses = Expense.query.filter(
+            db.and_(Expense.amount > 0, Expense.amount < 100)
+        ).all()
+        
+        for expense in small_expenses:
+            original_amount = expense.amount
+            expense.amount = expense.amount * 100
+            print(f"🔧 إصلاح مبلغ مصروف ({expense.description}): {original_amount} → {expense.amount}")
+            fixed_count += 1
+        
+        # Remove orphaned schedules (schedules without groups)
+        orphaned_schedules = Schedule.query.filter(~Schedule.group_id.in_(
+            db.session.query(Group.id).subquery()
+        )).all()
+        for schedule in orphaned_schedules:
+            db.session.delete(schedule)
+            fixed_count += 1
+        
+        db.session.commit()
+        
+        if fixed_count > 0:
+            flash(f'تم إصلاح {fixed_count} عنصر بنجاح', 'success')
+        else:
+            flash('لا توجد مشاكل تحتاج للإصلاح', 'info')
+            
+    except Exception as e:
+        db.session.rollback()
+        flash(f'حدث خطأ أثناء الإصلاح: {str(e)}', 'error')
+    
+    return redirect(url_for('reports'))
 
 if __name__ == '__main__':
     init_db()
