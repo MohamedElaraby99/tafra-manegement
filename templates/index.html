@@ -130,7 +130,7 @@
                 <div class="lessons-container">
                     {% if weekly_schedule[day] %}
                     {% for lesson in weekly_schedule[day] %}
-                    <div class="lesson-card">
+                    <div class="lesson-card" data-max-students="{{ lesson.max_students }}">
                         <div class="lesson-time">
                             <i class="fas fa-clock"></i>
                             {% set start_12 = convert_24_to_12_hour(lesson.start_time) %}
@@ -147,7 +147,7 @@
                             <span class="level-tag">{{ lesson.level or 'عام' }}</span>
                             <span class="students-count">
                                 <i class="fas fa-users"></i>
-                                {{ lesson.student_count }}
+                                {{ lesson.student_count }}/{{ lesson.max_students }}
                             </span>
                         </div>
                     </div>
@@ -585,8 +585,42 @@
     }
 
     .today-active {
-        border-color: #007bff;
-        background: linear-gradient(135deg, #e3f2fd 0%, #ffffff 100%);
+        border: 5px solid #6366f1 !important;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 25%, #e0e7ff 25%, #ffffff 100%) !important;
+        box-shadow: 0 15px 50px rgba(99, 102, 241, 0.6), inset 0 0 30px rgba(99, 102, 241, 0.2) !important;
+        transform: scale(1.08) !important;
+        position: relative;
+        overflow: hidden;
+        animation: today-glow 3s infinite;
+        z-index: 10;
+    }
+
+    .today-active::before {
+        content: 'حصص اليوم';
+        position: absolute;
+        top: -15px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(90deg, #6366f1, #8b5cf6, #6366f1);
+        color: white;
+        padding: 8px 20px;
+        border-radius: 0 0 15px 15px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        animation: badge-pulse 2s infinite;
+        z-index: 20;
+    }
+
+    .today-active::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 8px;
+        background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 50%, #6366f1 100%);
+        animation: side-glow 2s infinite;
     }
 
     .day-header {
@@ -595,11 +629,34 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        position: relative;
     }
 
     .today-active .day-header {
-        background: var(--primary-gradient);
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #6366f1 100%);
         color: white;
+        box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.2), 0 0 20px rgba(99, 102, 241, 0.6);
+        position: relative;
+    }
+
+    .today-active .day-header::before {
+        content: '📅 ';
+        font-size: 1.3rem;
+        margin-left: 10px;
+        animation: bounce-icon 1.5s infinite;
+    }
+
+    .today-badge {
+        background: linear-gradient(45deg, #a855f7, #c084fc);
+        color: white;
+        padding: 10px 18px;
+        border-radius: 25px;
+        font-size: 0.9rem;
+        font-weight: 800;
+        border: 2px solid #a855f7;
+        animation: pulse-badge 2s infinite;
+        box-shadow: 0 0 15px rgba(168, 85, 247, 0.6);
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
     }
 
     .day-name {
@@ -635,6 +692,32 @@
         transform: translateX(-5px);
     }
 
+    .today-active .lesson-card {
+        background: linear-gradient(135deg, #f3f4ff 0%, #ede9fe 50%, #ffffff 100%);
+        border-left: 6px solid #6366f1;
+        border-right: 2px solid #8b5cf6;
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3), inset 0 0 10px rgba(99, 102, 241, 0.12);
+        border-radius: 12px;
+        position: relative;
+        animation: lesson-highlight 4s infinite;
+    }
+
+    .today-active .lesson-card::before {
+        content: '⭐';
+        position: absolute;
+        top: 5px;
+        right: 10px;
+        font-size: 1.1rem;
+        animation: star-twinkle 1.5s infinite;
+    }
+
+    .today-active .lesson-card:hover {
+        background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 50%, #c4b5fd 100%);
+        transform: translateX(-8px) translateY(-3px);
+        box-shadow: 0 10px 30px rgba(99, 102, 241, 0.45);
+        border-left-width: 8px;
+    }
+
     .lesson-time {
         color: #007bff;
         font-weight: 600;
@@ -643,6 +726,30 @@
         display: flex;
         align-items: center;
         gap: 8px;
+    }
+
+    .today-active .lesson-time {
+        color: #4338ca;
+        font-weight: 800;
+        background: linear-gradient(90deg, #6366f1, #8b5cf6, #6366f1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-size: 1rem;
+        padding: 5px 10px;
+        border-radius: 8px;
+        background-color: rgba(99, 102, 241, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .today-active .lesson-time i {
+        color: #4338ca;
+        animation: tick-pulse 2s infinite;
+        margin-left: 5px;
+        background: linear-gradient(45deg, #6366f1, #8b5cf6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
 
     .lesson-group {
@@ -1116,6 +1223,154 @@
         }
     }
 
+    @keyframes shimmer-today {
+        0% {
+            background-position: -200% center;
+        }
+
+        100% {
+            background-position: 200% center;
+        }
+    }
+
+    @keyframes twinkle {
+
+        0%,
+        100% {
+            opacity: 1;
+            transform: scale(1) rotate(0deg);
+        }
+
+        25% {
+            opacity: 0.7;
+            transform: scale(1.1) rotate(90deg);
+        }
+
+        50% {
+            opacity: 1;
+            transform: scale(0.9) rotate(180deg);
+        }
+
+        75% {
+            opacity: 0.8;
+            transform: scale(1.05) rotate(270deg);
+        }
+    }
+
+    @keyframes pulse-badge {
+
+        0%,
+        100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+        }
+
+        50% {
+            transform: scale(1.05);
+            box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);
+        }
+    }
+
+    @keyframes tick-pulse {
+
+        0%,
+        100% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.2);
+        }
+    }
+
+    @keyframes today-glow {
+
+        0%,
+        100% {
+            box-shadow: 0 12px 40px rgba(99, 102, 241, 0.5), inset 0 0 30px rgba(99, 102, 241, 0.15);
+        }
+
+        50% {
+            box-shadow: 0 16px 50px rgba(99, 102, 241, 0.7), inset 0 0 40px rgba(99, 102, 241, 0.25);
+        }
+    }
+
+    @keyframes badge-pulse {
+
+        0%,
+        100% {
+            transform: scale(1) rotate(0deg);
+            background: linear-gradient(90deg, #6366f1, #8b5cf6, #6366f1);
+        }
+
+        50% {
+            transform: scale(1.1) rotate(2deg);
+            background: linear-gradient(90deg, #8b5cf6, #6366f1, #8b5cf6);
+        }
+    }
+
+    @keyframes side-glow {
+
+        0%,
+        100% {
+            background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 50%, #6366f1 100%);
+            box-shadow: 2px 0 10px rgba(99, 102, 241, 0.6);
+        }
+
+        50% {
+            background: linear-gradient(180deg, #8b5cf6 0%, #6366f1 50%, #8b5cf6 100%);
+            box-shadow: 4px 0 15px rgba(139, 92, 246, 0.8);
+        }
+    }
+
+    @keyframes bounce-icon {
+
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-5px);
+        }
+    }
+
+    @keyframes lesson-highlight {
+
+        0%,
+        100% {
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3), inset 0 0 10px rgba(99, 102, 241, 0.12);
+        }
+
+        50% {
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4), inset 0 0 15px rgba(99, 102, 241, 0.18);
+        }
+    }
+
+    @keyframes star-twinkle {
+
+        0%,
+        100% {
+            transform: scale(1) rotate(0deg);
+            opacity: 1;
+        }
+
+        25% {
+            transform: scale(1.2) rotate(90deg);
+            opacity: 0.7;
+        }
+
+        50% {
+            transform: scale(0.8) rotate(180deg);
+            opacity: 1;
+        }
+
+        75% {
+            transform: scale(1.1) rotate(270deg);
+            opacity: 0.8;
+        }
+    }
+
     @media (max-width: 768px) {
         .notification-card {
             flex-direction: column;
@@ -1277,9 +1532,12 @@
         const lessonCards = document.querySelectorAll('.lesson-card');
         lessonCards.forEach(card => {
             const studentCount = card.querySelector('.students-count');
+            const maxStudents = parseInt(card.dataset.maxStudents) || 15; // Get from data attribute or default to 15
+
             if (studentCount) {
-                const count = parseInt(studentCount.textContent);
-                const maxStudents = 15; // Default max
+                // Extract just the first number from "X/Y" format
+                const studentText = studentCount.textContent.trim();
+                const count = parseInt(studentText.split('/')[0]) || 0;
                 const percentage = Math.min((count / maxStudents) * 100, 100);
 
                 const progressBar = document.createElement('div');

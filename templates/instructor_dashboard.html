@@ -204,6 +204,31 @@
         border-color: transparent;
     }
 
+    /* Age filter specific styling */
+    .age-filter {
+        border-color: #28a745;
+        color: #28a745;
+    }
+
+    .age-filter.active {
+        background: linear-gradient(45deg, #28a745, #20c997);
+        color: white;
+        border-color: transparent;
+    }
+
+    .age-filter:hover {
+        background: linear-gradient(45deg, #28a745, #20c997);
+        color: white;
+        border-color: transparent;
+    }
+
+    /* Filter section styling */
+    .form-label.fw-bold {
+        color: #495057;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+    }
+
     .student-row {
         transition: all 0.3s ease;
     }
@@ -329,11 +354,21 @@
         }
 
         .filter-btn {
-            display: block;
-            width: 100%;
-            margin: 5px 0;
+            display: inline-block;
+            width: auto;
+            margin: 3px;
             text-align: center;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            padding: 6px 12px;
+        }
+
+        .group-filter .form-label.fw-bold {
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .group-filter .mb-3 {
+            margin-bottom: 1rem !important;
         }
 
         .students-card .table-responsive {
@@ -597,26 +632,60 @@
         </div>
     </div>
 
-    <!-- Group Filter -->
+    <!-- Filter Options -->
     <div class="group-filter">
-        <div class="row align-items-center">
-            <div class="col-md-3">
-                <h6 class="mb-0">
+        <div class="row">
+            <div class="col-md-2">
+                <h6 class="mb-3">
                     <i class="fas fa-filter me-2"></i>
                     فلترة الطلاب:
                 </h6>
             </div>
-            <div class="col-md-9">
-                <button class="filter-btn active" onclick="filterStudents('all')" data-group="all">
-                    <i class="fas fa-users me-1"></i>
-                    جميع الطلاب ({{ total_students }})
-                </button>
-                {% for group in instructor_groups %}
-                <button class="filter-btn" onclick="filterStudents('{{ group.id }}')" data-group="{{ group.id }}">
-                    <i class="fas fa-layer-group me-1"></i>
-                    {{ group.name }} ({{ group.students.count() }})
-                </button>
-                {% endfor %}
+            <div class="col-md-10">
+                <!-- Group Filters -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-layer-group me-1"></i>
+                        حسب المجموعة:
+                    </label>
+                    <div>
+                        <button class="filter-btn active" onclick="filterStudents('group', 'all')" data-group="all">
+                            <i class="fas fa-users me-1"></i>
+                            جميع المجموعات ({{ total_students }})
+                        </button>
+                        {% for group in instructor_groups %}
+                        <button class="filter-btn" onclick="filterStudents('group', '{{ group.id }}')"
+                            data-group="{{ group.id }}">
+                            <i class="fas fa-layer-group me-1"></i>
+                            {{ group.name }} ({{ group.students.count() }})
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Age Filters -->
+                {% if instructor_ages %}
+                <div class="mb-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-birthday-cake me-1"></i>
+                        حسب العمر:
+                    </label>
+                    <div>
+                        <button class="filter-btn age-filter active" onclick="filterStudents('age', 'all')"
+                            data-age="all">
+                            <i class="fas fa-users me-1"></i>
+                            جميع الأعمار
+                        </button>
+                        {% for age in instructor_ages %}
+                        <button class="filter-btn age-filter" onclick="filterStudents('age', '{{ age }}')"
+                            data-age="{{ age }}">
+                            <i class="fas fa-birthday-cake me-1"></i>
+                            {{ age }} سنة
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -642,7 +711,8 @@
                     <tbody>
                         {% for student in instructor_students %}
                         <tr class="student-row"
-                            data-groups="[{% for group in student.groups %}{% if group in instructor_groups %}{{ group.id }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}]">
+                            data-groups="[{% for group in student.groups %}{% if group in instructor_groups %}{{ group.id }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}]"
+                            data-age="{{ student.age or '' }}">
                             <td>
                                 <div class="d-flex align-items-center">
                                     <div class="avatar me-3"
@@ -693,29 +763,52 @@
 </div>
 
 <script>
-    function filterStudents(groupId) {
+    let currentGroupFilter = 'all';
+    let currentAgeFilter = 'all';
+
+    function filterStudents(filterType, filterValue) {
         const rows = document.querySelectorAll('.student-row');
-        const filterButtons = document.querySelectorAll('.filter-btn');
         const visibleCountElement = document.getElementById('visible-count');
+
+        // Update current filter
+        if (filterType === 'group') {
+            currentGroupFilter = filterValue;
+            // Remove active class from all group buttons
+            document.querySelectorAll('.filter-btn:not(.age-filter)').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            // Add active class to clicked group button
+            const activeButton = document.querySelector(`[data-group="${filterValue}"]`);
+            if (activeButton) {
+                activeButton.classList.add('active');
+            }
+        } else if (filterType === 'age') {
+            currentAgeFilter = filterValue;
+            // Remove active class from all age buttons
+            document.querySelectorAll('.age-filter').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            // Add active class to clicked age button
+            const activeButton = document.querySelector(`[data-age="${filterValue}"]`);
+            if (activeButton) {
+                activeButton.classList.add('active');
+            }
+        }
 
         let visibleCount = 0;
 
-        // Remove active class from all buttons
-        filterButtons.forEach(btn => {
-            btn.classList.remove('active');
-        });
-
-        // Add active class to clicked button
-        const activeButton = document.querySelector(`[data-group="${groupId}"]`);
-        if (activeButton) {
-            activeButton.classList.add('active');
-        }
-
-        // Filter rows
+        // Apply both filters
         rows.forEach(row => {
             const studentGroups = JSON.parse(row.dataset.groups || '[]');
+            const studentAge = row.dataset.age;
 
-            if (groupId === 'all' || studentGroups.includes(parseInt(groupId))) {
+            // Check group filter
+            const groupMatch = currentGroupFilter === 'all' || studentGroups.includes(parseInt(currentGroupFilter));
+
+            // Check age filter
+            const ageMatch = currentAgeFilter === 'all' || studentAge === currentAgeFilter;
+
+            if (groupMatch && ageMatch) {
                 row.classList.remove('hidden');
                 visibleCount++;
             } else {

@@ -415,7 +415,7 @@
                                     <i class="fas fa-calendar-day me-1"></i>
                                     {{ user.last_login.strftime('%Y-%m-%d') }}<br>
                                     <i class="fas fa-clock me-1"></i>
-                                    {{ user.last_login.strftime('%H:%M') }}
+                                    {{ format_time_12hour(user.last_login) }}
                                 </small>
                                 {% else %}
                                 <span class="text-muted">لم يسجل دخول بعد</span>

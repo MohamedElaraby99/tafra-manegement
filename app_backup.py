@@ -3268,17 +3268,13 @@ def import_system_data():
         import os
         import time
         
-        # Create temporary file for upload
-        temp_file_path = None
-        wb = None
-        
-        try:
-            # Save uploaded file temporarily
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                file.save(tmp_file.name)
-                temp_file_path = tmp_file.name
+        # Save uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            file.save(tmp_file.name)
+            temp_file_path = tmp_file.name
             
-            # Load workbook
+        wb = None
+        try:
             wb = load_workbook(temp_file_path, read_only=False, data_only=True)
             
             import_summary = {
@@ -3343,303 +3339,294 @@ def import_system_data():
                         import_summary['users'] += 1
                     except Exception as e:
                         import_summary['errors'].append(f'خطأ في استيراد المستخدم {row}: {str(e)}')
+                    
+                    db.session.commit()
                 
-                db.session.commit()
-            
-            # Import Instructors
-            if 'المدرسين' in wb.sheetnames:
-                ws = wb['المدرسين']
-                for row in ws.iter_rows(min_row=2, values_only=True):
-                    if not row[0] or not row[1]:  # Skip empty rows
-                        continue
-                    try:
-                        name = str(row[1]).strip()
-                        phone = str(row[2]).strip() if row[2] and str(row[2]).strip() != 'غير محدد' else None
-                        specialization = str(row[3]).strip() if row[3] and str(row[3]).strip() != 'غير محدد' else None
-                        
-                        # Check if instructor already exists
-                        if Instructor.query.filter_by(name=name).first():
+                # Import Instructors
+                if 'المدرسين' in wb.sheetnames:
+                    ws = wb['المدرسين']
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if not row[0] or not row[1]:  # Skip empty rows
                             continue
-                        
-                        instructor = Instructor(
-                            name=name,
-                            phone=phone,
-                            specialization=specialization
-                        )
-                        db.session.add(instructor)
-                        import_summary['instructors'] += 1
-                    except Exception as e:
-                        import_summary['errors'].append(f'خطأ في استيراد المدرس {row}: {str(e)}')
+                        try:
+                            name = str(row[1]).strip()
+                            phone = str(row[2]).strip() if row[2] and str(row[2]).strip() != 'غير محدد' else None
+                            specialization = str(row[3]).strip() if row[3] and str(row[3]).strip() != 'غير محدد' else None
+                            
+                            # Check if instructor already exists
+                            if Instructor.query.filter_by(name=name).first():
+                                continue
+                            
+                            instructor = Instructor(
+                                name=name,
+                                phone=phone,
+                                specialization=specialization
+                            )
+                            db.session.add(instructor)
+                            import_summary['instructors'] += 1
+                        except Exception as e:
+                            import_summary['errors'].append(f'خطأ في استيراد المدرس {row}: {str(e)}')
+                    
+                    db.session.commit()
                 
-                db.session.commit()
-            
-            # Import Groups
-            if 'المجموعات' in wb.sheetnames:
-                ws = wb['المجموعات']
-                for row in ws.iter_rows(min_row=2, values_only=True):
-                    if not row[0] or not row[1]:  # Skip empty rows
-                        continue
-                    try:
-                        name = str(row[1]).strip()
-                        level = str(row[2]).strip() if row[2] and str(row[2]).strip() != 'غير محدد' else None
-                        instructor_name = str(row[3]).strip() if row[3] and str(row[3]).strip() != 'غير محدد' else None
-                        price = float(str(row[4]).replace(',', '')) if row[4] else 0.0
-                        max_students = int(row[5]) if row[5] else 15
-                        
-                        # Find instructor by name
-                        instructor = None
-                        if instructor_name:
-                            instructor = Instructor.query.filter_by(name=instructor_name).first()
-                        
-                        # Check if group already exists
-                        if Group.query.filter_by(name=name).first():
+                # Import Groups
+                if 'المجموعات' in wb.sheetnames:
+                    ws = wb['المجموعات']
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if not row[0] or not row[1]:  # Skip empty rows
                             continue
-                        
-                        group = Group(
-                            name=name,
-                            level=level,
-                            instructor_id=instructor.id if instructor else None,
-                            price=price,
-                            max_students=max_students
-                        )
-                        db.session.add(group)
-                        import_summary['groups'] += 1
-                    except Exception as e:
-                        import_summary['errors'].append(f'خطأ في استيراد المجموعة {row}: {str(e)}')
+                        try:
+                            name = str(row[1]).strip()
+                            level = str(row[2]).strip() if row[2] and str(row[2]).strip() != 'غير محدد' else None
+                            instructor_name = str(row[3]).strip() if row[3] and str(row[3]).strip() != 'غير محدد' else None
+                            max_students = int(row[4]) if row[4] else 15
+                            price = float(str(row[6]).replace(',', '')) if row[6] else 0.0
+                            
+                            # Find instructor
+                            instructor = None
+                            if instructor_name:
+                                instructor = Instructor.query.filter_by(name=instructor_name).first()
+                            
+                            # Check if group already exists
+                            if Group.query.filter_by(name=name).first():
+                                continue
+                            
+                            group = Group(
+                                name=name,
+                                level=level,
+                                instructor_id=instructor.id if instructor else None,
+                                max_students=max_students,
+                                price=price
+                            )
+                            db.session.add(group)
+                            import_summary['groups'] += 1
+                        except Exception as e:
+                            import_summary['errors'].append(f'خطأ في استيراد المجموعة {row}: {str(e)}')
+                    
+                    db.session.commit()
                 
-                db.session.commit()
-            
-            # Import Schedules
-            if 'الجداول' in wb.sheetnames:
-                ws = wb['الجداول']
-                for row in ws.iter_rows(min_row=2, values_only=True):
-                    if not row[0] or not row[1]:  # Skip empty rows
-                        continue
-                    try:
-                        group_name = str(row[1]).strip()
-                        day_of_week = str(row[2]).strip()
-                        start_time = str(row[3]).strip()
-                        end_time = str(row[4]).strip()
-                        
-                        # Find group by name
-                        group = Group.query.filter_by(name=group_name).first()
-                        if not group:
+                # Import Schedules
+                if 'الجداول الزمنية' in wb.sheetnames:
+                    ws = wb['الجداول الزمنية']
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if not row[0] or not row[1]:  # Skip empty rows
                             continue
-                        
-                        # Check if schedule already exists
-                        existing_schedule = Schedule.query.filter_by(
-                            group_id=group.id,
-                            day_of_week=day_of_week,
-                            start_time=start_time
-                        ).first()
-                        
-                        if existing_schedule:
+                        try:
+                            group_name = str(row[1]).strip()
+                            day_of_week = str(row[3]).strip()
+                            start_time = str(row[4]).strip()
+                            end_time = str(row[5]).strip()
+                            
+                            # Find group
+                            group = Group.query.filter_by(name=group_name).first()
+                            if not group:
+                                continue
+                            
+                            # Check if schedule already exists
+                            if Schedule.query.filter_by(group_id=group.id, day_of_week=day_of_week).first():
+                                continue
+                            
+                            schedule = Schedule(
+                                group_id=group.id,
+                                day_of_week=day_of_week,
+                                start_time=start_time,
+                                end_time=end_time
+                            )
+                            db.session.add(schedule)
+                            import_summary['schedules'] += 1
+                        except Exception as e:
+                            import_summary['errors'].append(f'خطأ في استيراد الجدول الزمني {row}: {str(e)}')
+                    
+                    db.session.commit()
+                
+                # Import Students
+                if 'الطلاب' in wb.sheetnames:
+                    ws = wb['الطلاب']
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if not row[0] or not row[1]:  # Skip empty rows
                             continue
-                        
-                        schedule = Schedule(
-                            group_id=group.id,
-                            day_of_week=day_of_week,
-                            start_time=start_time,
-                            end_time=end_time
-                        )
-                        db.session.add(schedule)
-                        import_summary['schedules'] += 1
-                    except Exception as e:
-                        import_summary['errors'].append(f'خطأ في استيراد الجدول {row}: {str(e)}')
+                        try:
+                            name = str(row[1]).strip()
+                            phone = str(row[2]).strip() if row[2] and str(row[2]).strip() != 'غير محدد' else None
+                            age = int(row[3]) if row[3] and str(row[3]).strip() != 'غير محدد' else None
+                            location = str(row[4]).strip() if row[4] and str(row[4]).strip() != 'غير محدد' else None
+                            instructor_name = str(row[5]).strip() if row[5] and str(row[5]).strip() != 'غير محدد' else None
+                            groups_names = str(row[6]).strip() if row[6] and str(row[6]).strip() != 'لا توجد مجموعات' else ''
+                            
+                            # Extract discount if available (column 8)
+                            discount = 0.0
+                            if len(row) > 8 and row[8]:
+                                try:
+                                    discount = float(str(row[8]).replace(',', ''))
+                                except:
+                                    discount = 0.0
+                            
+                            # Extract total_paid if available (column 10)
+                            total_paid = 0.0
+                            if len(row) > 10 and row[10]:
+                                try:
+                                    total_paid = float(str(row[10]).replace(',', ''))
+                                except:
+                                    total_paid = 0.0
+                            
+                            # Extract registration_date if available (column 12)
+                            registration_date = datetime.now()
+                            if len(row) > 12 and row[12]:
+                                try:
+                                    if isinstance(row[12], datetime):
+                                        registration_date = row[12]
+                                    else:
+                                        registration_date = datetime.strptime(str(row[12]).split()[0], '%Y-%m-%d')
+                                except:
+                                    registration_date = datetime.now()
+                            
+                            # Find instructor
+                            instructor = None
+                            if instructor_name:
+                                instructor = Instructor.query.filter_by(name=instructor_name).first()
+                            
+                            # Check if student already exists
+                            if Student.query.filter_by(name=name).first():
+                                continue
+                            
+                            student = Student(
+                                name=name,
+                                phone=phone,
+                                age=age,
+                                location=location,
+                                instructor_id=instructor.id if instructor else None,
+                                total_paid=total_paid,
+                                discount=discount,
+                                registration_date=registration_date
+                            )
+                            db.session.add(student)
+                            db.session.flush()  # Get student ID
+                            
+                            # Add student to groups
+                            if groups_names:
+                                group_names_list = [g.strip() for g in groups_names.split(',')]
+                                for group_name in group_names_list:
+                                    group = Group.query.filter_by(name=group_name).first()
+                                    if group:
+                                        student.groups.append(group)
+                            
+                            import_summary['students'] += 1
+                        except Exception as e:
+                            import_summary['errors'].append(f'خطأ في استيراد الطالب {row}: {str(e)}')
+                    
+                    db.session.commit()
                 
-                db.session.commit()
-            
-            # Import Students
-            if 'الطلاب' in wb.sheetnames:
-                ws = wb['الطلاب']
-                for row in ws.iter_rows(min_row=2, values_only=True):
-                    if not row[0] or not row[1]:  # Skip empty rows
-                        continue
-                    try:
-                        name = str(row[1]).strip()
-                        phone = str(row[2]).strip() if row[2] and str(row[2]).strip() != 'غير محدد' else None
-                        age = int(row[3]) if row[3] and str(row[3]).strip() != 'غير محدد' else None
-                        location = str(row[4]).strip() if row[4] and str(row[4]).strip() != 'غير محدد' else None
-                        instructor_name = str(row[5]).strip() if row[5] and str(row[5]).strip() != 'غير محدد' else None
-                        groups_names = str(row[6]).strip() if row[6] and str(row[6]).strip() != 'لا توجد مجموعات' else ''
-                        
-                        # Extract discount if available (column 8)
-                        discount = 0.0
-                        if len(row) > 8 and row[8]:
-                            try:
-                                discount = float(str(row[8]).replace(',', ''))
-                            except:
-                                discount = 0.0
-                        
-                        # Extract total_paid if available (column 10)
-                        total_paid = 0.0
-                        if len(row) > 10 and row[10]:
-                            try:
-                                total_paid = float(str(row[10]).replace(',', ''))
-                            except:
-                                total_paid = 0.0
-                        
-                        # Extract registration_date if available (column 12)
-                        registration_date = datetime.now()
-                        if len(row) > 12 and row[12]:
-                            try:
-                                if isinstance(row[12], datetime):
-                                    registration_date = row[12]
-                                else:
-                                    # Try to parse date string
-                                    date_str = str(row[12]).strip()
-                                    registration_date = datetime.strptime(date_str, '%Y-%m-%d')
-                            except:
-                                registration_date = datetime.now()
-                        
-                        # Find instructor by name
-                        instructor = None
-                        if instructor_name:
-                            instructor = Instructor.query.filter_by(name=instructor_name).first()
-                        
-                        # Check if student already exists
-                        if Student.query.filter_by(name=name, phone=phone).first():
+                # Import Payments
+                if 'المدفوعات' in wb.sheetnames:
+                    ws = wb['المدفوعات']
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if not row[0] or not row[1]:  # Skip empty rows
                             continue
-                        
-                        student = Student(
-                            name=name,
-                            phone=phone,
-                            age=age,
-                            location=location,
-                            instructor_id=instructor.id if instructor else None,
-                            total_paid=total_paid,
-                            discount=discount,
-                            registration_date=registration_date
-                        )
-                        db.session.add(student)
-                        db.session.flush()  # Get student ID
-                        
-                        # Add student to groups
-                        if groups_names:
-                            group_names_list = [name.strip() for name in groups_names.split(',')]
-                            for group_name in group_names_list:
-                                group = Group.query.filter_by(name=group_name).first()
-                                if group:
-                                    student.groups.append(group)
-                        
-                        import_summary['students'] += 1
-                    except Exception as e:
-                        import_summary['errors'].append(f'خطأ في استيراد الطالب {row}: {str(e)}')
+                        try:
+                            student_name = str(row[1]).strip()
+                            amount = float(str(row[2]).replace(',', ''))
+                            month = str(row[3]).strip() if row[3] and str(row[3]).strip() != 'غير محدد' else None
+                            
+                            # Parse date
+                            payment_date = datetime.now()
+                            if row[4]:
+                                try:
+                                    if isinstance(row[4], datetime):
+                                        payment_date = row[4]
+                                    else:
+                                        payment_date = datetime.strptime(str(row[4]).split()[0], '%Y-%m-%d')
+                                except:
+                                    payment_date = datetime.now()
+                            
+                            notes = str(row[5]).strip() if row[5] and str(row[5]).strip() != 'لا توجد ملاحظات' else None
+                            
+                            # Find student
+                            student = Student.query.filter_by(name=student_name).first()
+                            if not student:
+                                continue
+                            
+                            payment = Payment(
+                                student_id=student.id,
+                                amount=amount,
+                                month=month,
+                                date=payment_date,
+                                notes=notes
+                            )
+                            db.session.add(payment)
+                            import_summary['payments'] += 1
+                        except Exception as e:
+                            import_summary['errors'].append(f'خطأ في استيراد المدفوعة {row}: {str(e)}')
+                    
+                    db.session.commit()
                 
-                db.session.commit()
-            
-            # Import Payments
-            if 'المدفوعات' in wb.sheetnames:
-                ws = wb['المدفوعات']
-                for row in ws.iter_rows(min_row=2, values_only=True):
-                    if not row[0] or not row[1]:  # Skip empty rows
-                        continue
-                    try:
-                        student_name = str(row[1]).strip()
-                        amount = float(str(row[2]).replace(',', '')) if row[2] else 0.0
-                        month = str(row[3]).strip() if row[3] else ''
-                        notes = str(row[4]).strip() if row[4] else None
-                        
-                        # Extract date if available (column 5)
-                        payment_date = datetime.now()
-                        if len(row) > 5 and row[5]:
-                            try:
-                                if isinstance(row[5], datetime):
-                                    payment_date = row[5]
-                                else:
-                                    date_str = str(row[5]).strip()
-                                    payment_date = datetime.strptime(date_str, '%Y-%m-%d')
-                            except:
-                                payment_date = datetime.now()
-                        
-                        # Find student by name
-                        student = Student.query.filter_by(name=student_name).first()
-                        if not student:
+                # Import Expenses
+                if 'المصروفات' in wb.sheetnames:
+                    ws = wb['المصروفات']
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if not row[0] or not row[1]:  # Skip empty rows
                             continue
-                        
-                        payment = Payment(
-                            student_id=student.id,
-                            amount=amount,
-                            month=month,
-                            notes=notes,
-                            date=payment_date
-                        )
-                        db.session.add(payment)
-                        import_summary['payments'] += 1
-                    except Exception as e:
-                        import_summary['errors'].append(f'خطأ في استيراد المدفوعات {row}: {str(e)}')
+                        try:
+                            description = str(row[1]).strip()
+                            amount = float(str(row[2]).replace(',', ''))
+                            category = str(row[3]).strip() if row[3] and str(row[3]).strip() != 'غير محدد' else None
+                            
+                            # Parse date
+                            expense_date = datetime.now()
+                            if row[4]:
+                                try:
+                                    if isinstance(row[4], datetime):
+                                        expense_date = row[4]
+                                    else:
+                                        expense_date = datetime.strptime(str(row[4]).split()[0], '%Y-%m-%d')
+                                except:
+                                    expense_date = datetime.now()
+                            
+                            notes = str(row[5]).strip() if row[5] and str(row[5]).strip() != 'لا توجد ملاحظات' else None
+                            
+                            expense = Expense(
+                                description=description,
+                                amount=amount,
+                                category=category,
+                                date=expense_date,
+                                notes=notes
+                            )
+                            db.session.add(expense)
+                            import_summary['expenses'] += 1
+                        except Exception as e:
+                            import_summary['errors'].append(f'خطأ في استيراد المصروف {row}: {str(e)}')
+                    
+                    db.session.commit()
                 
-                db.session.commit()
-            
-            # Import Expenses
-            if 'المصروفات' in wb.sheetnames:
-                ws = wb['المصروفات']
-                for row in ws.iter_rows(min_row=2, values_only=True):
-                    if not row[0] or not row[1]:  # Skip empty rows
-                        continue
-                    try:
-                        description = str(row[1]).strip()
-                        amount = float(str(row[2]).replace(',', '')) if row[2] else 0.0
-                        category = str(row[3]).strip() if row[3] else 'أخرى'
-                        notes = str(row[4]).strip() if row[4] else None
-                        
-                        # Extract date if available (column 5)
-                        expense_date = datetime.now()
-                        if len(row) > 5 and row[5]:
-                            try:
-                                if isinstance(row[5], datetime):
-                                    expense_date = row[5]
-                                else:
-                                    date_str = str(row[5]).strip()
-                                    expense_date = datetime.strptime(date_str, '%Y-%m-%d')
-                            except:
-                                expense_date = datetime.now()
-                        
-                        expense = Expense(
-                            description=description,
-                            amount=amount,
-                            category=category,
-                            notes=notes,
-                            date=expense_date
-                        )
-                        db.session.add(expense)
-                        import_summary['expenses'] += 1
-                    except Exception as e:
-                        import_summary['errors'].append(f'خطأ في استيراد المصروفات {row}: {str(e)}')
+                # Generate success message
+                success_msg = f"تم استيراد البيانات بنجاح! "
+                success_msg += f"المستخدمين: {import_summary['users']}, "
+                success_msg += f"المدرسين: {import_summary['instructors']}, "
+                success_msg += f"الطلاب: {import_summary['students']}, "
+                success_msg += f"المجموعات: {import_summary['groups']}, "
+                success_msg += f"الجداول: {import_summary['schedules']}, "
+                success_msg += f"المدفوعات: {import_summary['payments']}, "
+                success_msg += f"المصروفات: {import_summary['expenses']}"
                 
-                db.session.commit()
-            
-            # Generate success message
-            success_msg = f"تم استيراد البيانات بنجاح! "
-            success_msg += f"المستخدمين: {import_summary['users']}, "
-            success_msg += f"المدرسين: {import_summary['instructors']}, "
-            success_msg += f"المجموعات: {import_summary['groups']}, "
-            success_msg += f"الجداول: {import_summary['schedules']}, "
-            success_msg += f"الطلاب: {import_summary['students']}, "
-            success_msg += f"المدفوعات: {import_summary['payments']}, "
-            success_msg += f"المصروفات: {import_summary['expenses']}"
-            
-            flash(success_msg, 'success')
-            
-            # Show errors if any
-            if import_summary['errors']:
-                for error in import_summary['errors'][:5]:  # Show first 5 errors
-                    flash(error, 'warning')
-                if len(import_summary['errors']) > 5:
-                    flash(f'وتوجد {len(import_summary["errors"]) - 5} أخطاء أخرى...', 'warning')
-            
-            return redirect(url_for('reports'))
-            
+                flash(success_msg, 'success')
+                
+                # Show errors if any
+                if import_summary['errors']:
+                    for error in import_summary['errors'][:5]:  # Show first 5 errors
+                        flash(error, 'warning')
+                    if len(import_summary['errors']) > 5:
+                        flash(f'وتوجد {len(import_summary["errors"]) - 5} أخطاء أخرى...', 'warning')
+                
+                return redirect(url_for('reports'))
+                
         finally:
-            # Close workbook properly to release file handle
-            if wb:
-                try:
-                    wb.close()
-                except:
-                    pass
-            
-            # Clean up temporary file with multiple attempts
-            if temp_file_path:
+                # Close workbook properly to release file handle
+                if wb:
+                    try:
+                        wb.close()
+                    except:
+                        pass
+                
+                # Clean up temporary file with multiple attempts
                 cleanup_attempts = 0
                 max_attempts = 3
                 while cleanup_attempts < max_attempts:
