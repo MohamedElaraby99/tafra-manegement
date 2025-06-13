@@ -9,15 +9,15 @@ import sys
 import os
 
 # Add your project directory to the sys.path
-# Change 'yourusername' to your actual PythonAnywhere username
-project_home = '/home/yourusername/mysite'
-if project_home not in sys.path:
-    sys.path = [project_home] + sys.path
+path = '/home/tafrasystem/mysite'
+if path not in sys.path:
+    sys.path.append(path)
 
-# Set environment variable for configuration
+# Set environment variables
 os.environ['FLASK_CONFIG'] = 'pythonanywhere'
+os.environ['FLASK_APP'] = 'app.py'
 
-# Import your Flask application
+# Import your Flask app
 from app import app as application
 
 # Initialize the application for production

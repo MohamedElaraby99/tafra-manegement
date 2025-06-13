@@ -73,10 +73,10 @@ class PythonAnywhereConfig(Config):
     DEBUG = False
     
     # PythonAnywhere database path - change 'yourusername' to your actual username
-    SQLALCHEMY_DATABASE_URI = 'sqlite:////home/yourusername/mysite/tafra_system.db'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:////home/tafrasystem/mysite/tafra_system.db'
     
     # Security settings
-    SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
+    SESSION_COOKIE_SECURE = True  # Set to True for HTTPS
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     
@@ -93,6 +93,10 @@ class PythonAnywhereConfig(Config):
     # Additional settings
     PERMANENT_SESSION_LIFETIME = 86400  # 24 hours
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+    
+    # Static files configuration
+    STATIC_FOLDER = '/home/tafrasystem/mysite/static'
+    TEMPLATES_FOLDER = '/home/tafrasystem/mysite/templates'
 
 class TestingConfig(Config):
     """Testing configuration"""
