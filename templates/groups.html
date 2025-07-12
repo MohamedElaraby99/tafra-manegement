@@ -293,6 +293,7 @@
                             <th><i class="fas fa-users me-2"></i>عدد الطلاب</th>
                             <th><i class="fas fa-user-plus me-2"></i>الحد الأقصى</th>
                             <th><i class="fas fa-calendar me-2"></i>الجداول</th>
+                            <th><i class="fas fa-info-circle me-2"></i>الحالة</th>
                             <th class="text-center"><i class="fas fa-cogs me-2"></i>الإجراءات</th>
                         </tr>
                     </thead>
@@ -354,24 +355,67 @@
                                 {% endif %}
                             </td>
                             <td class="text-center">
-                                <button class="btn btn-warning btn-sm action-btn"
-                                    onclick="editGroup({{ group.id }}, '{{ group.name }}', '{{ group.level }}', {{ group.instructor_id }}, {{ group.price }}, {{ group.max_students }})"
-                                    title="تعديل المجموعة">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-danger btn-sm action-btn"
-                                    onclick="deleteGroup({{ group.id }}, '{{ group.name }}')" title="حذف المجموعة">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                                <a href="{{ url_for('group_details', group_id=group.id) }}"
-                                    class="btn btn-info btn-sm action-btn" title="تفاصيل المجموعة والحضور">
-                                    <i class="fas fa-chart-line"></i>
-                                </a>
+                                {% if group.status == 'completed' %}
+                                <div class="mb-2">
+                                    <span class="badge bg-success fs-6">
+                                        <i class="fas fa-check-circle me-1"></i>
+                                        مكتمل
+                                    </span>
+                                </div>
+                                {% if group.completion_date %}
+                                <small class="text-muted d-block">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    {{ group.completion_date.strftime('%Y-%m-%d') }}
+                                </small>
+                                {% endif %}
+                                {% else %}
+                                <span class="badge bg-primary fs-6">
+                                    <i class="fas fa-play-circle me-1"></i>
+                                    نشط
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-warning btn-sm action-btn"
+                                        onclick="editGroup({{ group.id }}, '{{ group.name }}', '{{ group.level }}', {{ group.instructor_id }}, {{ group.price }}, {{ group.max_students }})"
+                                        title="تعديل المجموعة">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+
+                                    {% if group.status == 'active' %}
+                                    <button class="btn btn-success btn-sm action-btn"
+                                        onclick="completeGroup({{ group.id }}, '{{ group.name }}')"
+                                        title="إنهاء المجموعة">
+                                        <i class="fas fa-check-circle"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-outline-primary btn-sm action-btn"
+                                        onclick="activateGroup({{ group.id }}, '{{ group.name }}')"
+                                        title="تفعيل المجموعة">
+                                        <i class="fas fa-play-circle"></i>
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm action-btn"
+                                        onclick="editCompletion({{ group.id }}, '{{ group.name }}', '{{ group.completion_date.strftime('%Y-%m-%d') if group.completion_date else '' }}', '{{ group.completion_notes or '' }}')"
+                                        title="تعديل تفاصيل الإنهاء">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    {% endif %}
+
+                                    <button class="btn btn-danger btn-sm action-btn"
+                                        onclick="deleteGroup({{ group.id }}, '{{ group.name }}')" title="حذف المجموعة">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    <a href="{{ url_for('group_details', group_id=group.id) }}"
+                                        class="btn btn-info btn-sm action-btn" title="تفاصيل المجموعة والحضور">
+                                        <i class="fas fa-chart-line"></i>
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-5">
+                            <td colspan="10" class="text-center text-muted py-5">
                                 <div>
                                     {% if selected_instructor %}
                                     <i class="fas fa-filter fa-5x mb-3 text-muted opacity-50"></i>
@@ -1590,6 +1634,43 @@
         handleFormSubmission('editGroupForm', true);
     });
 
+    // Group completion functions
+    function completeGroup(id, name) {
+        document.getElementById('completeGroupForm').action = `/complete_group/${id}`;
+        document.getElementById('completeGroupName').textContent = name;
+        document.getElementById('completionDate').value = new Date().toISOString().split('T')[0];
+        new bootstrap.Modal(document.getElementById('completeGroupModal')).show();
+    }
+
+    function activateGroup(id, name) {
+        Swal.fire({
+            title: 'تفعيل المجموعة',
+            html: `هل تريد تفعيل المجموعة "<strong>${name}</strong>" مرة أخرى؟<br><small class="text-muted">سيتم إزالة تاريخ الإنهاء والملاحظات</small>`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'نعم، فعل المجموعة',
+            cancelButtonText: 'إلغاء'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = `/activate_group/${id}`;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+    }
+
+    function editCompletion(id, name, completionDate, completionNotes) {
+        document.getElementById('editCompletionForm').action = `/update_group_completion/${id}`;
+        document.getElementById('editCompletionGroupName').textContent = name;
+        document.getElementById('editCompletionDate').value = completionDate;
+        document.getElementById('editCompletionNotes').value = completionNotes;
+        new bootstrap.Modal(document.getElementById('editCompletionModal')).show();
+    }
+
     // Add SweetAlert2 if not already included
     if (typeof Swal === 'undefined') {
         const script = document.createElement('script');
@@ -1597,4 +1678,82 @@
         document.head.appendChild(script);
     }
 </script>
+
+<!-- Complete Group Modal -->
+<div class="modal fade" id="completeGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-circle me-2"></i>
+                    إنهاء المجموعة
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="completeGroupForm">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        سيتم إنهاء المجموعة: <strong id="completeGroupName"></strong>
+                    </div>
+                    <div class="mb-3">
+                        <label for="completionDate" class="form-label">تاريخ الإنهاء *</label>
+                        <input type="date" class="form-control" id="completionDate" name="completion_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="completionNotes" class="form-label">ملاحظات الإنهاء</label>
+                        <textarea class="form-control" id="completionNotes" name="completion_notes" rows="3" 
+                                  placeholder="أضف ملاحظات حول إنهاء المجموعة (اختياري)"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        إنهاء المجموعة
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Completion Modal -->
+<div class="modal fade" id="editCompletionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2"></i>
+                    تعديل تفاصيل الإنهاء
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="editCompletionForm">
+                <div class="modal-body">
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle me-2"></i>
+                        المجموعة المكتملة: <strong id="editCompletionGroupName"></strong>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editCompletionDate" class="form-label">تاريخ الإنهاء *</label>
+                        <input type="date" class="form-control" id="editCompletionDate" name="completion_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editCompletionNotes" class="form-label">ملاحظات الإنهاء</label>
+                        <textarea class="form-control" id="editCompletionNotes" name="completion_notes" rows="3" 
+                                  placeholder="أضف ملاحظات حول إنهاء المجموعة (اختياري)"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>
+                        حفظ التغييرات
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}

@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, timedelta, date
 import os
 from functools import wraps
 from dotenv import load_dotenv
@@ -121,8 +121,22 @@ class Group(db.Model):
     instructor_id = db.Column(db.Integer, db.ForeignKey('instructor.id'))
     max_students = db.Column(db.Integer, default=15)
     price = db.Column(db.Float, default=0.0)  # Price for this group
+    # Course completion fields
+    status = db.Column(db.String(20), default='active')  # active, completed
+    completion_date = db.Column(db.Date, nullable=True)
+    completion_notes = db.Column(db.Text, nullable=True)
     # Students relationship is now defined in Student model with secondary table
     schedules = db.relationship('Schedule', backref='group_ref', lazy=True)
+    
+    @property
+    def is_completed(self):
+        """Check if the group/course is completed"""
+        return self.status == 'completed'
+    
+    @property
+    def active_students_count(self):
+        """Count of students currently enrolled in this group"""
+        return self.students.count()
 
 class Schedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -396,6 +410,17 @@ def format_arabic_date(date_obj):
     
     # Format: Day Month Year (e.g., 4 يونيو 2025)
     return f"{day} {month} {year}"
+
+# Helper function to get Arabic month name
+def get_arabic_month_name(month_num):
+    """Convert month number to Arabic month name"""
+    arabic_months = {
+        1: 'يناير', 2: 'فبراير', 3: 'مارس', 4: 'أبريل',
+        5: 'مايو', 6: 'يونيو', 7: 'يوليو', 8: 'أغسطس',
+        9: 'سبتمبر', 10: 'أكتوبر', 11: 'نوفمبر', 12: 'ديسمبر'
+    }
+    
+    return arabic_months.get(month_num, "")
 
 def format_time_12hour(datetime_obj):
     """Format time in 12-hour format with Arabic AM/PM"""
@@ -1069,18 +1094,134 @@ def mark_attendance():
 @app.route('/payments')
 @login_required
 def payments():
+    # Get pagination parameters
+    payments_page = request.args.get('payments_page', 1, type=int)
+    expenses_page = request.args.get('expenses_page', 1, type=int)
+    per_page = 10  # Number of items per page
+    
+    # Get search parameters
+    search_student = request.args.get('search_student', '')
+    search_month = request.args.get('search_month', '')
+    search_amount_min = request.args.get('search_amount_min', '')
+    search_amount_max = request.args.get('search_amount_max', '')
+    search_date_from = request.args.get('search_date_from', '')
+    search_date_to = request.args.get('search_date_to', '')
+    
+    # Expense search parameters
+    search_description = request.args.get('search_description', '')
+    search_category = request.args.get('search_category', '')
+    search_expense_amount_min = request.args.get('search_expense_amount_min', '')
+    search_expense_amount_max = request.args.get('search_expense_amount_max', '')
+    search_expense_date_from = request.args.get('search_expense_date_from', '')
+    search_expense_date_to = request.args.get('search_expense_date_to', '')
+    
     students = Student.query.all()
-    payments = Payment.query.order_by(Payment.date.desc()).all()
-    expenses = Expense.query.order_by(Expense.date.desc()).all()
+    
+    # Build payment query with filters
+    payment_query = Payment.query
+    
+    # Apply payment filters
+    if search_student:
+        student_ids = [s.id for s in students if search_student.lower() in s.name.lower()]
+        if student_ids:
+            payment_query = payment_query.filter(Payment.student_id.in_(student_ids))
+        else:
+            payment_query = payment_query.filter(Payment.student_id == -1)  # No results
+    
+    if search_month:
+        payment_query = payment_query.filter(Payment.month.ilike(f'%{search_month}%'))
+    
+    if search_amount_min:
+        try:
+            payment_query = payment_query.filter(Payment.amount >= float(search_amount_min))
+        except ValueError:
+            pass
+    
+    if search_amount_max:
+        try:
+            payment_query = payment_query.filter(Payment.amount <= float(search_amount_max))
+        except ValueError:
+            pass
+    
+    if search_date_from:
+        try:
+            date_from = datetime.strptime(search_date_from, '%Y-%m-%d')
+            payment_query = payment_query.filter(Payment.date >= date_from)
+        except ValueError:
+            pass
+    
+    if search_date_to:
+        try:
+            date_to = datetime.strptime(search_date_to, '%Y-%m-%d')
+            # Add 1 day to include the end date
+            date_to = date_to + timedelta(days=1)
+            payment_query = payment_query.filter(Payment.date < date_to)
+        except ValueError:
+            pass
+    
+    # Build expense query with filters
+    expense_query = Expense.query
+    
+    # Apply expense filters
+    if search_description:
+        expense_query = expense_query.filter(Expense.description.ilike(f'%{search_description}%'))
+    
+    if search_category:
+        expense_query = expense_query.filter(Expense.category.ilike(f'%{search_category}%'))
+    
+    if search_expense_amount_min:
+        try:
+            expense_query = expense_query.filter(Expense.amount >= float(search_expense_amount_min))
+        except ValueError:
+            pass
+    
+    if search_expense_amount_max:
+        try:
+            expense_query = expense_query.filter(Expense.amount <= float(search_expense_amount_max))
+        except ValueError:
+            pass
+    
+    if search_expense_date_from:
+        try:
+            date_from = datetime.strptime(search_expense_date_from, '%Y-%m-%d')
+            expense_query = expense_query.filter(Expense.date >= date_from)
+        except ValueError:
+            pass
+    
+    if search_expense_date_to:
+        try:
+            date_to = datetime.strptime(search_expense_date_to, '%Y-%m-%d')
+            # Add 1 day to include the end date
+            date_to = date_to + timedelta(days=1)
+            expense_query = expense_query.filter(Expense.date < date_to)
+        except ValueError:
+            pass
+    
+    # Paginated payments and expenses with filters
+    payments_paginated = payment_query.order_by(Payment.date.desc()).paginate(
+        page=payments_page, 
+        per_page=per_page, 
+        error_out=False
+    )
+    
+    expenses_paginated = expense_query.order_by(Expense.date.desc()).paginate(
+        page=expenses_page, 
+        per_page=per_page, 
+        error_out=False
+    )
+    
+    # All payments and expenses for calculations (without filters for totals)
+    all_payments = Payment.query.all()
+    all_expenses = Expense.query.all()
     
     # Calculate comprehensive statistics
-    total_income = sum(payment.amount for payment in payments) if payments else 0
-    total_expenses = sum(expense.amount for expense in expenses) if expenses else 0
+    total_income = sum(payment.amount for payment in all_payments) if all_payments else 0
+    total_expenses = sum(expense.amount for expense in all_expenses) if all_expenses else 0
     net_balance = total_income - total_expenses
     
     students_with_dues = sum(1 for student in students if student.remaining_balance > 0)
-    recent_payments = len([p for p in payments if (datetime.now() - p.date).days <= 30]) if payments else 0
-    recent_expenses = len([e for e in expenses if (datetime.now() - e.date).days <= 30]) if expenses else 0
+    recent_payments = len([p for p in all_payments if (datetime.now() - p.date).days <= 30]) if all_payments else 0
+    recent_expenses = len([e for e in all_expenses if (datetime.now() - e.date).days <= 30]) if all_expenses else 0
     
     # Monthly breakdown for current year
     current_year = datetime.now().year
@@ -1088,21 +1229,55 @@ def payments():
     monthly_expenses = {}
     
     # Get monthly income
-    for payment in payments:
+    for payment in all_payments:
         if payment.date.year == current_year:
             month = payment.date.month
             monthly_income[month] = monthly_income.get(month, 0) + payment.amount
     
     # Get monthly expenses  
-    for expense in expenses:
+    for expense in all_expenses:
         if expense.date.year == current_year:
             month = expense.date.month
             monthly_expenses[month] = monthly_expenses.get(month, 0) + expense.amount
     
+    # Monthly and group breakdown for revenue
+    monthly_group_income = {}
+    group_monthly_income = {}
+    
+    # Get all groups
+    groups = Group.query.all()
+    
+    # Create monthly breakdown by groups
+    for payment in all_payments:
+        student = Student.query.get(payment.student_id)
+        if student and payment.date.year == current_year:
+            month = payment.date.month
+            month_name = get_arabic_month_name(month)
+            
+            if month_name not in monthly_group_income:
+                monthly_group_income[month_name] = {}
+            
+            # Add payment to each group the student belongs to
+            for group in student.groups:
+                if group.name not in monthly_group_income[month_name]:
+                    monthly_group_income[month_name][group.name] = 0
+                # Distribute payment amount evenly among student's groups
+                amount_per_group = payment.amount / len(student.groups)
+                monthly_group_income[month_name][group.name] += amount_per_group
+                
+                # Also create group-based monthly breakdown
+                if group.name not in group_monthly_income:
+                    group_monthly_income[group.name] = {}
+                if month_name not in group_monthly_income[group.name]:
+                    group_monthly_income[group.name][month_name] = 0
+                group_monthly_income[group.name][month_name] += amount_per_group
+    
     return render_template('payments.html', 
                          students=students, 
-                         payments=payments,
-                         expenses=expenses,
+                         payments=payments_paginated.items,
+                         expenses=expenses_paginated.items,
+                         payments_pagination=payments_paginated,
+                         expenses_pagination=expenses_paginated,
                          total_income=total_income,
                          total_expenses=total_expenses,
                          net_balance=net_balance,
@@ -1110,7 +1285,27 @@ def payments():
                          recent_payments=recent_payments,
                          recent_expenses=recent_expenses,
                          monthly_income=monthly_income,
-                         monthly_expenses=monthly_expenses)
+                         monthly_expenses=monthly_expenses,
+                         monthly_group_income=monthly_group_income,
+                         group_monthly_income=group_monthly_income,
+                         groups=groups,
+                         # Model classes for template access
+                         Payment=Payment,
+                         Expense=Expense,
+                         # Search parameters for payments
+                         search_student=search_student,
+                         search_month=search_month,
+                         search_amount_min=search_amount_min,
+                         search_amount_max=search_amount_max,
+                         search_date_from=search_date_from,
+                         search_date_to=search_date_to,
+                         # Search parameters for expenses
+                         search_description=search_description,
+                         search_category=search_category,
+                         search_expense_amount_min=search_expense_amount_min,
+                         search_expense_amount_max=search_expense_amount_max,
+                         search_expense_date_from=search_expense_date_from,
+                         search_expense_date_to=search_expense_date_to)
 
 @app.route('/add_payment', methods=['POST'])
 def add_payment():
@@ -1133,6 +1328,58 @@ def add_payment():
     db.session.add(payment)
     db.session.commit()
     flash('تم إضافة الدفعة بنجاح', 'success')
+    return redirect(url_for('payments'))
+
+@app.route('/edit_payment/<int:payment_id>', methods=['POST'])
+@login_required
+def edit_payment(payment_id):
+    payment = Payment.query.get_or_404(payment_id)
+    old_amount = payment.amount
+    old_student_id = payment.student_id
+    
+    # Get new values
+    new_student_id = int(request.form['student_id'])
+    new_amount = float(request.form['amount'])
+    new_month = request.form['month']
+    new_notes = request.form['notes']
+    
+    # Update student's total paid - subtract old amount and add new amount
+    # Handle case where student might have changed
+    if old_student_id == new_student_id:
+        # Same student - adjust the difference
+        student = Student.query.get(old_student_id)
+        student.total_paid = student.total_paid - old_amount + new_amount
+    else:
+        # Different student - subtract from old, add to new
+        old_student = Student.query.get(old_student_id)
+        old_student.total_paid -= old_amount
+        new_student = Student.query.get(new_student_id)
+        new_student.total_paid += new_amount
+    
+    # Update payment
+    payment.student_id = new_student_id
+    payment.amount = new_amount
+    payment.month = new_month
+    payment.notes = new_notes
+    
+    db.session.commit()
+    flash('تم تحديث الدفعة بنجاح', 'success')
+    return redirect(url_for('payments'))
+
+@app.route('/delete_payment/<int:payment_id>', methods=['POST'])
+@login_required
+def delete_payment(payment_id):
+    payment = Payment.query.get_or_404(payment_id)
+    
+    # Update student's total paid - subtract the payment amount
+    student = Student.query.get(payment.student_id)
+    student.total_paid -= payment.amount
+    
+    # Delete the payment
+    db.session.delete(payment)
+    db.session.commit()
+    
+    flash('تم حذف الدفعة بنجاح', 'success')
     return redirect(url_for('payments'))
 
 @app.route('/reports')
@@ -1752,8 +1999,89 @@ def get_group_details(group_id):
         'level': group.level,
         'instructor_id': group.instructor_id,
         'max_students': group.max_students,
+        'price': group.price,
+        'status': group.status,
+        'completion_date': group.completion_date.strftime('%Y-%m-%d') if group.completion_date else None,
+        'completion_notes': group.completion_notes,
         'schedules': schedules
     })
+
+@app.route('/complete_group/<int:group_id>', methods=['POST'])
+@login_required
+def complete_group(group_id):
+    group = Group.query.get_or_404(group_id)
+    
+    if group.status == 'completed':
+        flash('هذه المجموعة مكتملة بالفعل', 'warning')
+        return redirect(url_for('groups'))
+    
+    # Get completion data
+    completion_notes = request.form.get('completion_notes', '')
+    completion_date = request.form.get('completion_date')
+    
+    # Parse completion date
+    if completion_date:
+        try:
+            completion_date = datetime.strptime(completion_date, '%Y-%m-%d').date()
+        except ValueError:
+            completion_date = datetime.now().date()
+    else:
+        completion_date = datetime.now().date()
+    
+    # Update group status
+    group.status = 'completed'
+    group.completion_date = completion_date
+    group.completion_notes = completion_notes
+    
+    db.session.commit()
+    flash(f'تم إنهاء المجموعة "{group.name}" بنجاح', 'success')
+    return redirect(url_for('groups'))
+
+@app.route('/activate_group/<int:group_id>', methods=['POST'])
+@login_required
+def activate_group(group_id):
+    group = Group.query.get_or_404(group_id)
+    
+    if group.status == 'active':
+        flash('هذه المجموعة نشطة بالفعل', 'warning')
+        return redirect(url_for('groups'))
+    
+    # Reactivate group
+    group.status = 'active'
+    group.completion_date = None
+    group.completion_notes = None
+    
+    db.session.commit()
+    flash(f'تم تفعيل المجموعة "{group.name}" بنجاح', 'success')
+    return redirect(url_for('groups'))
+
+@app.route('/update_group_completion/<int:group_id>', methods=['POST'])
+@login_required
+def update_group_completion(group_id):
+    group = Group.query.get_or_404(group_id)
+    
+    if group.status != 'completed':
+        flash('هذه المجموعة غير مكتملة', 'error')
+        return redirect(url_for('groups'))
+    
+    # Update completion details
+    completion_notes = request.form.get('completion_notes', '')
+    completion_date = request.form.get('completion_date')
+    
+    if completion_date:
+        try:
+            completion_date = datetime.strptime(completion_date, '%Y-%m-%d').date()
+        except ValueError:
+            completion_date = group.completion_date
+    else:
+        completion_date = group.completion_date
+    
+    group.completion_date = completion_date
+    group.completion_notes = completion_notes
+    
+    db.session.commit()
+    flash(f'تم تحديث تفاصيل إنهاء المجموعة "{group.name}" بنجاح', 'success')
+    return redirect(url_for('groups'))
 
 @app.route('/add_expense', methods=['POST'])
 def add_expense():
@@ -1772,6 +2100,32 @@ def add_expense():
     db.session.add(expense)
     db.session.commit()
     flash('تم إضافة المصروف بنجاح', 'success')
+    return redirect(url_for('payments'))
+
+@app.route('/edit_expense/<int:expense_id>', methods=['POST'])
+@login_required
+def edit_expense(expense_id):
+    expense = Expense.query.get_or_404(expense_id)
+    
+    # Update expense details
+    expense.description = request.form['description']
+    expense.amount = float(request.form['amount'])
+    expense.category = request.form['category']
+    expense.notes = request.form.get('notes', '')
+    
+    db.session.commit()
+    flash('تم تحديث المصروف بنجاح', 'success')
+    return redirect(url_for('payments'))
+
+@app.route('/delete_expense/<int:expense_id>', methods=['POST'])
+@login_required
+def delete_expense(expense_id):
+    expense = Expense.query.get_or_404(expense_id)
+    
+    db.session.delete(expense)
+    db.session.commit()
+    
+    flash('تم حذف المصروف بنجاح', 'success')
     return redirect(url_for('payments'))
 
 @app.route('/group_details/<int:group_id>')

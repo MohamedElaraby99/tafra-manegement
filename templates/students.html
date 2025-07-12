@@ -299,9 +299,22 @@
                                     {% if student.groups %}
                                     {% for group in student.groups %}
                                     <div class="mb-1">
-                                        <span class="badge bg-primary me-1">{{ group.name }}</span>
+                                        {% if group.status == 'completed' %}
+                                        <span class="badge bg-success me-1">
+                                            <i class="fas fa-check-circle me-1"></i>
+                                            {{ group.name }}
+                                        </span>
+                                        {% if group.completion_date %}
+                                        <small class="text-muted">(مكتمل: {{ group.completion_date.strftime('%Y-%m-%d') }})</small>
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="badge bg-primary me-1">
+                                            <i class="fas fa-play-circle me-1"></i>
+                                            {{ group.name }}
+                                        </span>
+                                        {% endif %}
                                         {% if group.instructor_ref %}
-                                        <small class="text-muted">({{ group.instructor_ref.name }})</small>
+                                        <small class="text-muted d-block">({{ group.instructor_ref.name }})</small>
                                         {% endif %}
                                     </div>
                                     {% endfor %}
