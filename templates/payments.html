@@ -307,10 +307,31 @@
                     </div>
                     {% endif %}
 
+                    <!-- Bulk Actions for Payments -->
+                    <div class="bulk-actions-bar" id="paymentsBulkActions" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border rounded mb-3">
+                            <span class="selected-count">تم تحديد <strong id="selectedPaymentsCount">0</strong>
+                                مدفوعة</span>
+                            <div class="btn-group">
+                                <button class="btn btn-outline-danger btn-sm" onclick="bulkDeletePayments()">
+                                    <i class="fas fa-trash me-1"></i>
+                                    حذف المحددة
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="clearPaymentSelection()">
+                                    <i class="fas fa-times me-1"></i>
+                                    إلغاء التحديد
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
+                                    <th>
+                                        <input type="checkbox" id="selectAllPayments" class="form-check-input">
+                                    </th>
                                     <th>#</th>
                                     <th>الطالب</th>
                                     <th>المبلغ</th>
@@ -324,6 +345,12 @@
                                 {% for payment in payments %}
                                 {% set student = students|selectattr('id', 'equalto', payment.student_id)|first %}
                                 <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input payment-checkbox"
+                                            value="{{ payment.id }}"
+                                            data-student-name="{{ student.name if student else 'غير محدد' }}"
+                                            data-amount="{{ payment.amount }}">
+                                    </td>
                                     <td>{{ loop.index }}</td>
                                     <td>
                                         <div class="d-flex align-items-center">
@@ -355,7 +382,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-4">
+                                    <td colspan="8" class="text-center text-muted py-4">
                                         <i class="fas fa-money-bill fa-3x mb-3"></i>
                                         <p>لا توجد مدفوعات مسجلة بعد</p>
                                     </td>
@@ -506,10 +533,31 @@
                     </div>
                     {% endif %}
 
+                    <!-- Bulk Actions for Expenses -->
+                    <div class="bulk-actions-bar" id="expensesBulkActions" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center p-3 bg-light border rounded mb-3">
+                            <span class="selected-count">تم تحديد <strong id="selectedExpensesCount">0</strong>
+                                مصروف</span>
+                            <div class="btn-group">
+                                <button class="btn btn-outline-danger btn-sm" onclick="bulkDeleteExpenses()">
+                                    <i class="fas fa-trash me-1"></i>
+                                    حذف المحددة
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="clearExpenseSelection()">
+                                    <i class="fas fa-times me-1"></i>
+                                    إلغاء التحديد
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
+                                    <th>
+                                        <input type="checkbox" id="selectAllExpenses" class="form-check-input">
+                                    </th>
                                     <th>#</th>
                                     <th>الوصف</th>
                                     <th>الفئة</th>
@@ -522,6 +570,11 @@
                             <tbody>
                                 {% for expense in expenses %}
                                 <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input expense-checkbox"
+                                            value="{{ expense.id }}" data-description="{{ expense.description }}"
+                                            data-amount="{{ expense.amount }}">
+                                    </td>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ expense.description }}</td>
                                     <td>
@@ -549,7 +602,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-4">
+                                    <td colspan="8" class="text-center text-muted py-4">
                                         <i class="fas fa-receipt fa-3x mb-3"></i>
                                         <p>لا توجد مصروفات مسجلة بعد</p>
                                     </td>
@@ -1023,6 +1076,39 @@
                     <button type="submit" class="btn btn-danger">
                         <i class="fas fa-trash me-2"></i>
                         حذف
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Delete Confirmation Modal -->
+<div class="modal fade" id="bulkDeleteConfirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2 text-danger"></i>
+                    تأكيد الحذف الجماعي
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="bulkDeleteMessage"></p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-info-circle me-2"></i>
+                    هذا الإجراء لا يمكن التراجع عنه وسيتم حذف جميع العناصر المحددة
+                </div>
+                <div id="bulkDeleteList" class="mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <form method="POST" id="bulkDeleteForm" style="display: inline;">
+                    <input type="hidden" name="bulk_delete_ids" id="bulkDeleteIds">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-2"></i>
+                        حذف الكل
                     </button>
                 </form>
             </div>
@@ -1538,6 +1624,76 @@
         color: #28a745;
     }
 
+    /* Bulk Actions Styles */
+    .bulk-actions-bar {
+        animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .bulk-actions-bar .bg-light {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        border: 2px solid #dee2e6 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .bulk-actions-bar .selected-count {
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .bulk-actions-bar .btn-outline-danger:hover {
+        background-color: #dc3545;
+        border-color: #dc3545;
+        color: white;
+    }
+
+    .bulk-actions-bar .btn-outline-secondary:hover {
+        background-color: #6c757d;
+        border-color: #6c757d;
+        color: white;
+    }
+
+    /* Checkbox Styles */
+    .form-check-input {
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+    }
+
+    .form-check-input:checked {
+        background-color: #007bff;
+        border-color: #007bff;
+    }
+
+    .form-check-input:indeterminate {
+        background-color: #6c757d;
+        border-color: #6c757d;
+    }
+
+    /* Table Row Selection */
+    tr:has(.form-check-input:checked) {
+        background-color: rgba(0, 123, 255, 0.05);
+        border-left: 3px solid #007bff;
+    }
+
+    /* Bulk Delete Modal */
+    #bulkDeleteConfirmModal .list-group-item {
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        margin-bottom: 5px;
+    }
+
     /* Responsive improvements */
     @media (max-width: 768px) {
 
@@ -1563,6 +1719,19 @@
         .search-form .col-md-3,
         .search-form .col-md-6 {
             padding: 5px;
+        }
+
+        .bulk-actions-bar .d-flex {
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bulk-actions-bar .btn-group {
+            width: 100%;
+        }
+
+        .bulk-actions-bar .btn {
+            flex: 1;
         }
     }
 </style>
@@ -1950,5 +2119,164 @@
             });
         }
     });
+
+    // Bulk Selection Functions for Payments
+    document.addEventListener('DOMContentLoaded', function () {
+        const selectAllPayments = document.getElementById('selectAllPayments');
+        const paymentCheckboxes = document.querySelectorAll('.payment-checkbox');
+        const paymentsBulkActions = document.getElementById('paymentsBulkActions');
+        const selectedPaymentsCount = document.getElementById('selectedPaymentsCount');
+
+        // Select All Payments
+        if (selectAllPayments) {
+            selectAllPayments.addEventListener('change', function () {
+                paymentCheckboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+                updatePaymentsBulkActions();
+            });
+        }
+
+        // Individual Payment Checkbox
+        paymentCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                updatePaymentsBulkActions();
+            });
+        });
+
+        function updatePaymentsBulkActions() {
+            const checkedPayments = document.querySelectorAll('.payment-checkbox:checked');
+            const count = checkedPayments.length;
+
+            if (count > 0) {
+                paymentsBulkActions.style.display = 'block';
+                selectedPaymentsCount.textContent = count;
+                selectAllPayments.indeterminate = count > 0 && count < paymentCheckboxes.length;
+                selectAllPayments.checked = count === paymentCheckboxes.length;
+            } else {
+                paymentsBulkActions.style.display = 'none';
+                selectAllPayments.indeterminate = false;
+                selectAllPayments.checked = false;
+            }
+        }
+
+        // Bulk Selection Functions for Expenses
+        const selectAllExpenses = document.getElementById('selectAllExpenses');
+        const expenseCheckboxes = document.querySelectorAll('.expense-checkbox');
+        const expensesBulkActions = document.getElementById('expensesBulkActions');
+        const selectedExpensesCount = document.getElementById('selectedExpensesCount');
+
+        // Select All Expenses
+        if (selectAllExpenses) {
+            selectAllExpenses.addEventListener('change', function () {
+                expenseCheckboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+                updateExpensesBulkActions();
+            });
+        }
+
+        // Individual Expense Checkbox
+        expenseCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                updateExpensesBulkActions();
+            });
+        });
+
+        function updateExpensesBulkActions() {
+            const checkedExpenses = document.querySelectorAll('.expense-checkbox:checked');
+            const count = checkedExpenses.length;
+
+            if (count > 0) {
+                expensesBulkActions.style.display = 'block';
+                selectedExpensesCount.textContent = count;
+                selectAllExpenses.indeterminate = count > 0 && count < expenseCheckboxes.length;
+                selectAllExpenses.checked = count === expenseCheckboxes.length;
+            } else {
+                expensesBulkActions.style.display = 'none';
+                selectAllExpenses.indeterminate = false;
+                selectAllExpenses.checked = false;
+            }
+        }
+    });
+
+    // Bulk Delete Functions
+    function bulkDeletePayments() {
+        const selectedPayments = document.querySelectorAll('.payment-checkbox:checked');
+        if (selectedPayments.length === 0) {
+            alert('يرجى تحديد مدفوعات للحذف');
+            return;
+        }
+
+        const ids = Array.from(selectedPayments).map(checkbox => checkbox.value);
+        document.getElementById('bulkDeleteIds').value = ids.join(',');
+        document.getElementById('bulkDeleteForm').action = '/bulk_delete_payments';
+
+        // Build list of payments to delete
+        let listHtml = '<ul class="list-group">';
+        selectedPayments.forEach(checkbox => {
+            const studentName = checkbox.getAttribute('data-student-name');
+            const amount = checkbox.getAttribute('data-amount');
+            listHtml += `<li class="list-group-item d-flex justify-content-between">
+                <span>${studentName}</span>
+                <span class="badge bg-success">${amount} ج.م</span>
+            </li>`;
+        });
+        listHtml += '</ul>';
+
+        document.getElementById('bulkDeleteList').innerHTML = listHtml;
+        document.getElementById('bulkDeleteMessage').innerHTML = `هل أنت متأكد من حذف <strong>${selectedPayments.length}</strong> مدفوعة؟`;
+
+        new bootstrap.Modal(document.getElementById('bulkDeleteConfirmModal')).show();
+    }
+
+    function bulkDeleteExpenses() {
+        const selectedExpenses = document.querySelectorAll('.expense-checkbox:checked');
+        if (selectedExpenses.length === 0) {
+            alert('يرجى تحديد مصروفات للحذف');
+            return;
+        }
+
+        const ids = Array.from(selectedExpenses).map(checkbox => checkbox.value);
+        document.getElementById('bulkDeleteIds').value = ids.join(',');
+        document.getElementById('bulkDeleteForm').action = '/bulk_delete_expenses';
+
+        // Build list of expenses to delete
+        let listHtml = '<ul class="list-group">';
+        selectedExpenses.forEach(checkbox => {
+            const description = checkbox.getAttribute('data-description');
+            const amount = checkbox.getAttribute('data-amount');
+            listHtml += `<li class="list-group-item d-flex justify-content-between">
+                <span>${description}</span>
+                <span class="badge bg-danger">${amount} ج.م</span>
+            </li>`;
+        });
+        listHtml += '</ul>';
+
+        document.getElementById('bulkDeleteList').innerHTML = listHtml;
+        document.getElementById('bulkDeleteMessage').innerHTML = `هل أنت متأكد من حذف <strong>${selectedExpenses.length}</strong> مصروف؟`;
+
+        new bootstrap.Modal(document.getElementById('bulkDeleteConfirmModal')).show();
+    }
+
+    function clearPaymentSelection() {
+        document.querySelectorAll('.payment-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        document.getElementById('selectAllPayments').checked = false;
+        document.getElementById('selectAllPayments').indeterminate = false;
+        document.getElementById('paymentsBulkActions').style.display = 'none';
+    }
+
+    function clearExpenseSelection() {
+        document.querySelectorAll('.expense-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        document.getElementById('selectAllExpenses').checked = false;
+        document.getElementById('selectAllExpenses').indeterminate = false;
+        document.getElementById('expensesBulkActions').style.display = 'none';
+    }
+
+
 </script>
 {% endblock %}

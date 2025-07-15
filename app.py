@@ -2128,6 +2128,88 @@ def delete_expense(expense_id):
     flash('تم حذف المصروف بنجاح', 'success')
     return redirect(url_for('payments'))
 
+@app.route('/bulk_delete_payments', methods=['POST'])
+@login_required
+def bulk_delete_payments():
+    payment_ids = request.form.get('bulk_delete_ids', '')
+    
+    if not payment_ids:
+        flash('لم يتم تحديد أي مدفوعات للحذف', 'error')
+        return redirect(url_for('payments'))
+    
+    try:
+        # Convert comma-separated IDs to list of integers
+        ids_list = [int(id.strip()) for id in payment_ids.split(',') if id.strip()]
+        
+        if not ids_list:
+            flash('لم يتم تحديد أي مدفوعات للحذف', 'error')
+            return redirect(url_for('payments'))
+        
+        # Get all payments to be deleted
+        payments_to_delete = Payment.query.filter(Payment.id.in_(ids_list)).all()
+        
+        if not payments_to_delete:
+            flash('لم يتم العثور على المدفوعات المحددة', 'error')
+            return redirect(url_for('payments'))
+        
+        # Update students' total_paid before deleting payments
+        for payment in payments_to_delete:
+            student = Student.query.get(payment.student_id)
+            if student:
+                student.total_paid -= payment.amount
+        
+        # Delete all selected payments
+        Payment.query.filter(Payment.id.in_(ids_list)).delete(synchronize_session=False)
+        
+        db.session.commit()
+        flash(f'تم حذف {len(payments_to_delete)} مدفوعة بنجاح', 'success')
+        
+    except ValueError:
+        flash('خطأ في معرفات المدفوعات', 'error')
+    except Exception as e:
+        db.session.rollback()
+        flash('حدث خطأ أثناء حذف المدفوعات', 'error')
+    
+    return redirect(url_for('payments'))
+
+@app.route('/bulk_delete_expenses', methods=['POST'])
+@login_required
+def bulk_delete_expenses():
+    expense_ids = request.form.get('bulk_delete_ids', '')
+    
+    if not expense_ids:
+        flash('لم يتم تحديد أي مصروفات للحذف', 'error')
+        return redirect(url_for('payments'))
+    
+    try:
+        # Convert comma-separated IDs to list of integers
+        ids_list = [int(id.strip()) for id in expense_ids.split(',') if id.strip()]
+        
+        if not ids_list:
+            flash('لم يتم تحديد أي مصروفات للحذف', 'error')
+            return redirect(url_for('payments'))
+        
+        # Get all expenses to be deleted for counting
+        expenses_to_delete = Expense.query.filter(Expense.id.in_(ids_list)).all()
+        
+        if not expenses_to_delete:
+            flash('لم يتم العثور على المصروفات المحددة', 'error')
+            return redirect(url_for('payments'))
+        
+        # Delete all selected expenses
+        Expense.query.filter(Expense.id.in_(ids_list)).delete(synchronize_session=False)
+        
+        db.session.commit()
+        flash(f'تم حذف {len(expenses_to_delete)} مصروف بنجاح', 'success')
+        
+    except ValueError:
+        flash('خطأ في معرفات المصروفات', 'error')
+    except Exception as e:
+        db.session.rollback()
+        flash('حدث خطأ أثناء حذف المصروفات', 'error')
+    
+    return redirect(url_for('payments'))
+
 @app.route('/group_details/<int:group_id>')
 @login_required
 def group_details(group_id):
